@@ -14,28 +14,35 @@
 
 namespace fletch {
 
-const uint32_t kInterruptPortId = 0;
+// XXXXX
+const uint32_t kInterruptPortId = 1000;
 
 class PortMapping {
  public:
-  PortMapping() : mapping() {}
+  PortMapping() {}
 
-  void SetPort(uint32_t port_id, Port *port) {
-    Port *existing = mapping[port_id];
+  void SetPort(uint32_t port_id, Port *port, int mask) {
+    Port *existing = devices[port_id]->port;
     if (existing != NULL) FATAL("Already listening to port");
-    mapping[port_id] = port;
+    devices[port_id]->port = port;
+    devices[port_id]->mask = mask;
   }
 
   Port *GetPort(uint32_t port_id) {
-    return mapping[port_id];
+    return devices[port_id]->port;
+  }
+
+  int GetMask(uint32_t port_id) {
+    return devices[port_id]->mask;
   }
 
   void RemovePort(uint32_t port_id) {
-    mapping.Erase(mapping.Find(port_id));
+    devices[port_id]->port = NULL;
+    devices[port_id]->mask = 0;
   }
 
  private:
-  HashMap<uint32_t, Port*> mapping;
+
 };
 
 void EventHandler::Create() {
@@ -45,7 +52,8 @@ void EventHandler::Create() {
 void EventHandler::Interrupt() {
   // The interrupt event currently contains no message.
   int64 dummy_message = 0;
-  SendMessageCmsis(kInterruptPortId, dummy_message);
+  int64 dummy_flag = 0;
+  SendMessageCmsis(kInterruptPortId, dummy_message, dummy_flag);
 }
 
 Object* EventHandler::Add(Process* process, Object* id, Port* port,
@@ -58,7 +66,7 @@ Object* EventHandler::Add(Process* process, Object* id, Port* port,
 
   ScopedMonitorLock locker(monitor_);
 
-  reinterpret_cast<PortMapping*>(data_)->SetPort(port_id, port);
+  reinterpret_cast<PortMapping*>(data_)->SetPort(port_id, port, flags);
   port->IncrementRef();
   return process->program()->null_object();
 }
@@ -98,10 +106,15 @@ void EventHandler::Run() {
       int64 value = message->message;
       uint32_t port_id = message->port_id;
       if (port_id != kInterruptPortId) {
-        Port *port = reinterpret_cast<PortMapping*>(data_)->GetPort(port_id);
-        if (port == NULL) {
+        PortMapping * port_mapping = reinterpret_cast<PortMapping*>(data_);
+
+        Port *port = port_mapping->GetPort(port_id);
+        int mask = port_mapping->GetMask(port_id);
+        if (port == NULL || ((mask & message->mask) == 0)) {
+      printf("Dropping mail %d %d %d!\n", port_id, mask, message->mask);
           // No listener - drop the event.
         } else {
+      printf("Got mail!\n");
           reinterpret_cast<PortMapping*>(data_)->RemovePort(port_id);
           Send(port, value, true);
         }

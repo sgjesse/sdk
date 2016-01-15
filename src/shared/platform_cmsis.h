@@ -14,6 +14,8 @@
 #include <errno.h>
 #include <cmsis_os.h>
 
+#include "src/vm/object.h"
+#include "src/vm/vector.h"
 #include "src/shared/globals.h"
 
 #ifdef DEBUG
@@ -76,6 +78,8 @@
 
 namespace fletch {
 
+class Port;
+
 static const int kMutexSize = sizeof(int32_t) * 3;
 static const int kSemaphoreSize = sizeof(int32_t) * 2;
 
@@ -84,9 +88,29 @@ osMailQId GetFletchMailQ();
 struct CmsisMessage {
   uint32_t port_id;
   int64 message;
+  uint32_t mask;
 };
 
-int SendMessageCmsis(uint32_t port_id, int64_t message);
+class Device {
+ public:
+  Device(Port *port, int mask, void* data)
+    : port(port), mask(mask), data(data) {}
+
+  // The port waiting for messages on this device
+  Port *port;
+
+  // The mask for messages on this device.
+  int mask;
+
+  // Data associated with the device.
+  void *data;
+};
+
+extern Vector<Device*> devices;
+
+int SendMessageCmsis(uint32_t port_id, int64_t message, uint32_t mask);
+
+int InstallDevice(Device *device);
 
 // Forward declare [Platform::GetMicroseconds].
 namespace Platform {

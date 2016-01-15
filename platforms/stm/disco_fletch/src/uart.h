@@ -12,6 +12,8 @@
 
 #include "platforms/stm/disco_fletch/src/circular_buffer.h"
 
+#include "src/shared/platform.h"
+
 // Interface to the universal asynchronous receiver/transmitter
 // (UART).
 class Uart {
@@ -19,37 +21,44 @@ class Uart {
   // Access the UART on the first UART port.
   Uart();
 
-  // Start processing the UART.
-  void Start();
+  // Opens the uart. Returns the port id used for listening.
+  int Open();
 
-  // Read up to count bytes from the UART into the buffer starting at
-  // buffer.
+  // Reads up to `count` bytes from the UART into `buffer` starting at
+  // buffer. Returns the number of bytes read.
   //
-  // This will block until at least one byte can be read.
+  // This is non-blocking, and will return 0 if no data is available.
   size_t Read(uint8_t* buffer, size_t count);
 
-
-  // Read up to count bytes from the buffer starting at buffer to the
-  // UART.
+  // Reads up to `count` bytes from the UART into `buffer` starting at
+  // buffer. Returns the number of bytes written.
   //
-  // This will block until at least one byte can be written.
+  // This is non-blocking, and will return 0 if no data could be written.
   size_t Write(uint8_t* buffer, size_t count);
-
- private:
-  static const int kTxBlockSize = 10;
 
   void Task();
 
   void EnsureTransmission();
 
-  UART_HandleTypeDef* uart_;
-  int error_count_;
-  osSemaphoreDef(semaphore_def_);
-  osSemaphoreId(semaphore_);
+ private:
+  static const int kTxBlockSize = 10;
 
-  // Receive status.
-  uint8_t rx_data_;  // The one byte received at the time.
-  CircularBuffer* rx_buffer_;
+  bool readyToRead_;
+  bool readyToWrite_;
+
+  uint8_t read_data_;
+  CircularBuffer* read_buffer_;
+  CircularBuffer* write_buffer_;
+
+  int port_id_ = 0;
+
+  UART_HandleTypeDef* uart_;
+
+  void SendMessage(uint64_t message, uint32_t mask);
+
+  fletch::Device device;
+
+  friend void ReturnFromInterrupt(UART_HandleTypeDef *huart, uint32_t flag);
 
   // Transmit status.
   fletch::Mutex* tx_mutex_;
@@ -59,5 +68,7 @@ class Uart {
 
   friend void __UartTask(const void*);
 };
+
+Uart *GetUart(int port_id);
 
 #endif  // PLATFORMS_STM_DISCO_FLETCH_SRC_UART_H_

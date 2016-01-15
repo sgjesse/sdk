@@ -24,12 +24,20 @@ osMailQId GetFletchMailQ() {
   return fletchMailQ;
 }
 
+Vector<Device*> devices;
+
+int InstallDevice(Device *device) {
+  devices.PushBack(device);
+  return devices.size() - 1;
+}
+
 // Sends a message on the fletch osMailQ used by the event handler.
-int SendMessageCmsis(uint32_t port_id, int64_t message) {
+int SendMessageCmsis(uint32_t port_id, int64_t message, uint32_t mask) {
   CmsisMessage *cmsisMessage =
       reinterpret_cast<CmsisMessage*>(osMailAlloc(fletchMailQ, 0));
   cmsisMessage->port_id = port_id;
   cmsisMessage->message = message;
+  cmsisMessage->mask = mask;
   return osMailPut(GetFletchMailQ(), reinterpret_cast<void*>(cmsisMessage));
 }
 
@@ -42,6 +50,7 @@ void Platform::Setup() {
   time_launch = GetMicroseconds();
   osMailQDef(fletch_queue, kMailQSize, CmsisMessage);
   fletchMailQ = osMailCreate(osMailQ(fletch_queue), NULL);
+  devices = Vector<Device*>();
 }
 
 void Platform::TearDown() { }

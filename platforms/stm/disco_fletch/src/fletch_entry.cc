@@ -18,19 +18,23 @@ extern unsigned char _binary_snapshot_start;
 extern unsigned char _binary_snapshot_end;
 extern unsigned char _binary_snapshot_size;
 
-Uart* uart;
-
-extern "C" size_t UartRead(uint8_t* buffer, size_t count) {
-  return uart->Read(buffer, count);
+extern "C" size_t UartRead(int port_id, uint8_t* buffer, size_t count) {
+  return GetUart(port_id)->Read(buffer, count);
 }
 
-extern "C" size_t UartWrite(uint8_t* buffer, size_t count) {
-  return uart->Write(buffer, count);
+extern "C" size_t UartWrite(int port_id, uint8_t* buffer, size_t count) {
+  return GetUart(port_id)->Write(buffer, count);
+}
+
+extern "C" size_t UartOpen(int port_id, uint8_t* buffer, size_t count) {
+  Uart *uart = new Uart();
+  return uart->Open();
 }
 
 FLETCH_EXPORT_TABLE_BEGIN
   FLETCH_EXPORT_TABLE_ENTRY("uart_read", UartRead)
   FLETCH_EXPORT_TABLE_ENTRY("uart_write", UartWrite)
+  FLETCH_EXPORT_TABLE_ENTRY("uart_open", UartOpen)
   FLETCH_EXPORT_TABLE_ENTRY("BSP_LED_On", BSP_LED_On)
   FLETCH_EXPORT_TABLE_ENTRY("BSP_LED_Off", BSP_LED_Off)
 FLETCH_EXPORT_TABLE_END
@@ -53,10 +57,6 @@ void FletchEntry(void const * argument) {
   BSP_LED_Init(LED1);
 
   Logger::Create();
-
-  // For now always start the UART.
-  uart = new Uart();
-  uart->Start();
 
   StartFletch(argument);
 

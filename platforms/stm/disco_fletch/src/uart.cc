@@ -8,6 +8,8 @@
 
 #include <stm32f7xx_hal.h>
 
+#include <task.h>
+
 #include "platforms/stm/disco_fletch/src/logger.h"
 
 #include "src/shared/atomic.h"
@@ -23,26 +25,35 @@ extern UART_HandleTypeDef huart1;
 const int kReceivedBit = 1 << 0;
 const int kTransmittedBit = 1 << 1;
 const int kErrorBit = 1 << 2;
-static fletch::Atomic<uint32_t> interrupt_flags;
 
 const int kRxBufferSize = 511;
 const int kTxBufferSize = 511;
 
-Uart::Uart()
-  : device(NULL, 0, this) {
+Uart::Uart() : device_(NULL, 0, this) {
   uart_ = &huart1;
   read_buffer_ = new CircularBuffer(kRxBufferSize);
   write_buffer_ = new CircularBuffer(kTxBufferSize);
+  tx_pending_ = false;
+  interrupt_flags.store(0);
+  tx_mutex_ = fletch::Platform::CreateMutex();
+  semaphore_ = xSemaphoreCreateCounting(3, 0);
 }
 
 fletch::HashMap<UART_HandleTypeDef*, Uart*> openUarts =
     fletch::HashMap<UART_HandleTypeDef*, Uart*>();
 
+void UartTask(void *arg) {
+  reinterpret_cast<Uart*>(arg)->Task();
+}
+
 int Uart::Open() {
   ASSERT(port_id_ == 0);
 
-  port_id_ = fletch::InstallDevice(&device);
+  port_id_ = fletch::InstallDevice(&device_);
   openUarts[uart_] = this;
+
+  TaskHandle_t handle;
+  xTaskCreate(UartTask, "Uart", 1024, this, configMAX_PRIORITIES - 1, &handle);
 
   // Start receiving.
   HAL_UART_Receive_IT(uart_, &read_data_, 1);
@@ -55,62 +66,18 @@ size_t Uart::Read(uint8_t* buffer, size_t count) {
 }
 
 size_t Uart::Write(uint8_t* buffer, size_t count) {
-  return write_buffer_->Write(buffer, count, CircularBuffer::kDontBlock);
-}
-
-void Uart::SendMessage(uint64_t message, uint32_t mask) {
-  fletch::SendMessageCmsis(port_id_, message, mask);
-}
-
-Uart *GetUart(int port_id) {
-  return reinterpret_cast<Uart*>(fletch::devices[port_id]->data);
-}
-
-void Uart::Task() {
-  // Process notifications from the interrupt handlers.
-//  for (;;) {
-//    // Wait for an interrupt to be processed.
-//    // osSemaphoreWait(semaphore_, osWaitForever);
-//    // Read the flags and set them to zero.
-//    uint32_t flags = interrupt_flags.exchange(0);
-//
-//    if ((flags & kReceivedBit) != 0) {
-//      // Don't block when writing to the buffer. Buffer overrun will
-//      // cause lost data.
-//      read_buffer_->Write(&read_data_, 1, CircularBuffer::kDontBlock);
-//
-//      // Start receiving of next byte.
-//      HAL_StatusTypeDef status = HAL_UART_Receive_IT(uart_, &read_data_, 1);
-//      if (status != HAL_OK) {
-//        LOG_ERROR("%d\n", status);
-//      }
-//    }
-//
-//    if ((flags & kTransmittedBit) != 0) {
-//      fletch::ScopedLock lock(tx_mutex_);
-//      tx_pending_ = false;
-//      EnsureTransmission();
-//    }
-//
-//    if ((flags & kErrorBit) != 0) {
-//      // Ignore errors for now.
-//      error_count_++;
-//      error = 0;
-//      // Setup interrupt for next byte.
-//      HAL_StatusTypeDef status = HAL_UART_Receive_IT(uart_, &read_data_, 1);
-//      if (status != HAL_OK) {
-//        LOG_ERROR("%d\n", status);
-//      }
-//    }
-//    // Send a message to listening ports.
-//    fletch::SendMessageCmsis(uart->port_id_, mask, mask);
-//  }
+  size_t written_count =
+      write_buffer_->Write(buffer, count, CircularBuffer::kDontBlock);
+  if (written_count > 0) {
+    EnsureTransmission();
+  }
+  return written_count;
 }
 
 void Uart::EnsureTransmission() {
   if (!tx_pending_) {
     // Don't block when there is nothing to send.
-    int bytes = tx_buffer_->Read(
+    int bytes = write_buffer_->Read(
         tx_data_, kTxBlockSize, CircularBuffer::kDontBlock);
     if (bytes > 0) {
       HAL_StatusTypeDef status = HAL_UART_Transmit_IT(uart_, tx_data_, bytes);
@@ -122,28 +89,73 @@ void Uart::EnsureTransmission() {
   }
 }
 
+void Uart::Task() {
+  // Process notifications from the interrupt handlers.
+  for (;;) {
+    // Wait for an interrupt to be processed.
+    printf("Waiting\n");
+    xSemaphoreTake(semaphore_, portMAX_DELAY);
+    uint32_t flags = interrupt_flags.exchange(0);
+    printf("Waking up %d\n", flags);
+    if ((flags & kReceivedBit) != 0) {
+      // Don't block when writing to the buffer. Buffer overrun will
+      // cause lost data.
+      read_buffer_->Write(&read_data_, 1, CircularBuffer::kDontBlock);
+      printf("Setting up new read\n");
+      HAL_StatusTypeDef status = HAL_UART_Receive_IT(uart_, &read_data_, 1);
+      if (status != HAL_OK) {
+        LOG_ERROR("%d\n", status);
+      }
+      SendMessage(flags);
+    }
+    if ((flags & kTransmittedBit) != 0) {
+      fletch::ScopedLock lock(tx_mutex_);
+      tx_pending_ = false;
+      EnsureTransmission();
+      if (!write_buffer_->IsFull()) {
+        SendMessage(flags);
+      }
+    }
+    // XXX handle errors.
+  }
+}
+
+void Uart::SendMessage(uint32_t msg) {
+  printf("Sending message %d\n", msg);
+  fletch::SendMessageCmsis(port_id_, msg, msg);
+}
+
+Uart *GetUart(int port_id) {
+  return reinterpret_cast<Uart*>(fletch::devices[port_id]->data);
+}
+
 // Shared return from interrupt handler. Will set the specified flag
-// and transfer control to the thread handling interrupts.
-void ReturnFromInterrupt(UART_HandleTypeDef *huart, uint32_t flag) {
+// and transfer control to the event handler.
+void Uart::ReturnFromInterrupt(uint32_t flag) {
   // Set the requested bit.
   uint32_t flags = interrupt_flags;
-  uint32_t new_flags = flags |= flag;
   bool success = false;
   while (!success) {
-    success =
-        interrupt_flags.compare_exchange_weak(flags, new_flags);
+    uint32_t new_flags = flags | flag;
+    success = interrupt_flags.compare_exchange_weak(flags, new_flags);
   }
 
-  Uart *uart = openUarts[huart];
-  uart->SendMessage(new_flags, new_flags);
+  // Pass control to the thread handling interrupts.
+  portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(semaphore_, &xHigherPriorityTaskWoken);
+  portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  ReturnFromInterrupt(huart, kReceivedBit);
+  printf("rxcallback\n");
+  Uart *uart = openUarts[huart];
+  uart->ReturnFromInterrupt(kReceivedBit);
 }
 
 extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-  ReturnFromInterrupt(huart, kTransmittedBit);
+//  printf("txcallback\n");
+  Uart *uart = openUarts[huart];
+  uart->ReturnFromInterrupt(kTransmittedBit);
 }
 
 extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
@@ -154,6 +166,4 @@ extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
   __HAL_UART_CLEAR_FEFLAG(huart);
   __HAL_UART_CLEAR_PEFLAG(huart);
   __HAL_UART_CLEAR_NEFLAG(huart);
-
-  ReturnFromInterrupt(huart, kErrorBit);
 }

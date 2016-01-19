@@ -19,7 +19,6 @@ class Uart {
   Uart() {
     portId = _uart_open.icall$0();
     print("Port $portId");
-    print("Port $portId");
     channel = new Channel();
     port = new Port(channel);
   }
@@ -31,8 +30,9 @@ class Uart {
 
   ByteBuffer readNext() {
     eventHandler.registerPortForNextEvent(portId, port, READ_EVENT);
+    print("Receiving");
     channel.receive();
-    print("received");
+    print("Received");
     var mem = new ForeignMemory.allocated(10);
     try {
       var read = _uart_read.icall$3(portId, mem, 10);
@@ -46,8 +46,14 @@ class Uart {
   }
 
   void write(ByteBuffer data) {
+    int written = 0;
     var bytes = data.lengthInBytes;
-    _uart_write.icall$3(portId, _getForeign(data), bytes);
+    while (written < bytes) {
+      written += _uart_write.icall$3(portId, _getForeign(data), bytes);
+      if (written == bytes) break;
+      eventHandler.registerPortForNextEvent(portId, port, WRITE_EVENT);
+      channel.receive();
+    }
   }
 
   void writeByte(int byte) {
@@ -78,9 +84,8 @@ main() {
   var uart = new Uart();
 
   uart.writeString("\rWelcome to Dart UART echo!\r\n");
-  uart.writeString("--------------------------\r\n");
+  print("Dummy");
   while (true) {
-    var data = new Uint8List.view(uart.readNext());
-    print(data);
+    print(new String.fromCharCodes( uart.readNext().asUint8List()));
   }
 }

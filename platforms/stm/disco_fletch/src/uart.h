@@ -7,6 +7,8 @@
 
 #include <inttypes.h>
 
+#include <FreeRTOS.h>
+#include <semphr.h>
 #include <cmsis_os.h>
 #include <stm32f7xx_hal.h>
 
@@ -40,7 +42,10 @@ class Uart {
 
   void EnsureTransmission();
 
+  void ReturnFromInterrupt(uint32_t flag);
  private:
+  uint32_t mask_;
+
   static const int kTxBlockSize = 10;
 
   bool readyToRead_;
@@ -54,19 +59,19 @@ class Uart {
 
   UART_HandleTypeDef* uart_;
 
-  void SendMessage(uint64_t message, uint32_t mask);
+  void SendMessage(uint32_t msg);
 
-  fletch::Device device;
+  fletch::Device device_;
 
-  friend void ReturnFromInterrupt(UART_HandleTypeDef *huart, uint32_t flag);
 
   // Transmit status.
   fletch::Mutex* tx_mutex_;
   uint8_t tx_data_[kTxBlockSize];  // Buffer send to the HAL.
+  // Are we currently waiting for transmission to finish.
   bool tx_pending_;
-  CircularBuffer* tx_buffer_;
+  SemaphoreHandle_t semaphore_;
+  fletch::Atomic<uint32_t> interrupt_flags;
 
-  friend void __UartTask(const void*);
 };
 
 Uart *GetUart(int port_id);

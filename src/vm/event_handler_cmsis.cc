@@ -111,10 +111,9 @@ void EventHandler::Run() {
         Port *port = port_mapping->GetPort(port_id);
         int mask = port_mapping->GetMask(port_id);
         if (port == NULL || ((mask & message->mask) == 0)) {
-      printf("Dropping mail %d %d %d!\n", port_id, mask, message->mask);
           // No listener - drop the event.
+          printf("Dropped message %d %d %d \n", port, mask, message->mask);
         } else {
-      printf("Got mail!\n");
           reinterpret_cast<PortMapping*>(data_)->RemovePort(port_id);
           Send(port, value, true);
         }

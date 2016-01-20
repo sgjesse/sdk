@@ -7,18 +7,18 @@ import 'dart:typed_data';
 import 'dart:fletch.os';
 import 'dart:fletch' hide sleep;
 
-final _uart_write = ForeignLibrary.main.lookup('uart_write');
-final _uart_read = ForeignLibrary.main.lookup('uart_read');
-final _uart_open = ForeignLibrary.main.lookup('uart_open');
+final _uartOpen = ForeignLibrary.main.lookup('uart_open');
+final _uartRead = ForeignLibrary.main.lookup('uart_read');
+final _uartWrite = ForeignLibrary.main.lookup('uart_write');
+final _uart_getError = ForeignLibrary.main.lookup('uart_get_error');
 
 class Uart {
-  int portId;
+  int deviceId;
   Port port;
   Channel channel;
 
   Uart() {
-    portId = _uart_open.icall$0();
-    print("Port $portId");
+    deviceId = _uartOpen.icall$0();
     channel = new Channel();
     port = new Port(channel);
   }
@@ -29,13 +29,19 @@ class Uart {
   }
 
   ByteBuffer readNext() {
-    eventHandler.registerPortForNextEvent(portId, port, READ_EVENT);
-    print("Receiving");
-    channel.receive();
-    print("Received");
+    int event = 0;
+    while (event & READ_EVENT == 0) {
+      eventHandler.registerPortForNextEvent(
+          deviceId, port, READ_EVENT | ERROR_EVENT);
+      event = channel.receive();
+      if (event & ERROR_EVENT != 0) {
+        print("Error ${_uart_getError.icall$1(deviceId)}.");
+      }
+    }
+
     var mem = new ForeignMemory.allocated(10);
     try {
-      var read = _uart_read.icall$3(portId, mem, 10);
+      var read = _uartRead.icall$3(deviceId, mem, 10);
       assert(read > 0);
       var result = new Uint8List(read);
       mem.copyBytesToList(result, 0, read, 0);
@@ -46,46 +52,35 @@ class Uart {
   }
 
   void write(ByteBuffer data) {
-    int written = 0;
-    var bytes = data.lengthInBytes;
-    while (written < bytes) {
-      written += _uart_write.icall$3(portId, _getForeign(data), bytes);
-      if (written == bytes) break;
-      eventHandler.registerPortForNextEvent(portId, port, WRITE_EVENT);
-      channel.receive();
-    }
-  }
-
-  void writeByte(int byte) {
-    var mem = new ForeignMemory.allocated(1);
-    mem.setUint8(0, byte);
-    try {
-      _uart_write.icall$3(portId, mem, 1);
-    } finally {
-      mem.free();
-    }
+    _write(_getForeign(data), data.lengthInBytes);
   }
 
   int writeString(String message) {
     var mem = new ForeignMemory.fromStringAsUTF8(message);
     try {
       // Don't write the terminating \0.
-      _uart_write.icall$3(portId, mem, mem.length - 1);
+      _write(mem, mem.length - 1);
     } finally {
       mem.free();
+    }
+  }
+
+  void _write(ForeignMemory mem, int size) {
+    int written = 0;
+    while (written < size) {
+      written += _uartWrite.icall$3(deviceId, mem, size);
+      if (written == size) break;
+      eventHandler.registerPortForNextEvent(deviceId, port, WRITE_EVENT);
+      channel.receive();
     }
   }
 }
 
 main() {
-  const int CR = 13;
-  const int LF = 10;
-
   var uart = new Uart();
 
   uart.writeString("\rWelcome to Dart UART echo!\r\n");
-  print("Dummy");
   while (true) {
-    print(new String.fromCharCodes( uart.readNext().asUint8List()));
+    uart.write(uart.readNext());
   }
 }

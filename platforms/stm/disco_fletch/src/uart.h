@@ -16,8 +16,7 @@
 
 #include "src/shared/platform.h"
 
-// Interface to the universal asynchronous receiver/transmitter
-// (UART).
+// Interface to the universal asynchronous receiver/transmitter (UART).
 class Uart {
  public:
   // Access the UART on the first UART port.
@@ -38,11 +37,17 @@ class Uart {
   // This is non-blocking, and will return 0 if no data could be written.
   size_t Write(uint8_t* buffer, size_t count);
 
+  // Returns the current error-bits of this device.
+  uint32_t GetError();
+
   void Task();
 
   void EnsureTransmission();
 
   void ReturnFromInterrupt(uint32_t flag);
+
+  uint32_t error_;
+
  private:
   uint32_t mask_;
 
@@ -55,14 +60,13 @@ class Uart {
   CircularBuffer* read_buffer_;
   CircularBuffer* write_buffer_;
 
-  int port_id_ = 0;
+  int device_id_ = -1;
 
   UART_HandleTypeDef* uart_;
 
-  void SendMessage(uint32_t msg);
+  void SendMessage();
 
   fletch::Device device_;
-
 
   // Transmit status.
   fletch::Mutex* tx_mutex_;
@@ -74,6 +78,6 @@ class Uart {
 
 };
 
-Uart *GetUart(int port_id);
+Uart *GetUart(int device_id);
 
 #endif  // PLATFORMS_STM_DISCO_FLETCH_SRC_UART_H_

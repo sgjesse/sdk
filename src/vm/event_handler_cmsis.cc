@@ -14,46 +14,17 @@
 
 namespace fletch {
 
-// XXXXX
-const uint32_t kInterruptPortId = 1000;
+// Pseudo device-id indicating a interrupt.
+const int kInterruptDeviceId = -1;
 
-class PortMapping {
- public:
-  PortMapping() {}
-
-  void SetPort(uint32_t port_id, Port *port, int mask) {
-    Port *existing = devices[port_id]->port;
-    if (existing != NULL) FATAL("Already listening to port");
-    devices[port_id]->port = port;
-    devices[port_id]->mask = mask;
-  }
-
-  Port *GetPort(uint32_t port_id) {
-    return devices[port_id]->port;
-  }
-
-  int GetMask(uint32_t port_id) {
-    return devices[port_id]->mask;
-  }
-
-  void RemovePort(uint32_t port_id) {
-    devices[port_id]->port = NULL;
-    devices[port_id]->mask = 0;
-  }
-
- private:
-
-};
+class Data {};
 
 void EventHandler::Create() {
-  data_ = reinterpret_cast<void*>(new PortMapping());
+  data_ = reinterpret_cast<void*>(new Data());
 }
 
 void EventHandler::Interrupt() {
-  // The interrupt event currently contains no message.
-  int64 dummy_message = 0;
-  int64 dummy_flag = 0;
-  SendMessageCmsis(kInterruptPortId, dummy_message, dummy_flag);
+  SendMessageCmsis(kInterruptDeviceId);
 }
 
 Object* EventHandler::Add(Process* process, Object* id, Port* port,
@@ -62,12 +33,23 @@ Object* EventHandler::Add(Process* process, Object* id, Port* port,
 
   EnsureInitialized();
 
-  int port_id = Smi::cast(id)->value();
+  int device_id = Smi::cast(id)->value();
 
   ScopedMonitorLock locker(monitor_);
 
-  reinterpret_cast<PortMapping*>(data_)->SetPort(port_id, port, flags);
-  port->IncrementRef();
+  Device *device = GetDevice(device_id);
+  Port *existing = device->port;
+  if (existing != NULL) FATAL("Already listening to device");
+  int device_flags = device->flags;
+  if ((flags & device_flags) != 0) {
+    // There is already an event waiting. Send a message immediately.
+    Send(port, device_flags, false);
+  } else {
+    device->port = port;
+    device->mask = flags;
+    port->IncrementRef();
+  }
+
   return process->program()->null_object();
 }
 
@@ -103,19 +85,16 @@ void EventHandler::Run() {
     if (event.status == osEventMail) {
       CmsisMessage *message = reinterpret_cast<CmsisMessage*>(event.value.p);
 
-      int64 value = message->message;
-      uint32_t port_id = message->port_id;
-      if (port_id != kInterruptPortId) {
-        PortMapping * port_mapping = reinterpret_cast<PortMapping*>(data_);
-
-        Port *port = port_mapping->GetPort(port_id);
-        int mask = port_mapping->GetMask(port_id);
-        if (port == NULL || ((mask & message->mask) == 0)) {
-          // No listener - drop the event.
-          printf("Dropped message %d %d %d \n", port, mask, message->mask);
+      int device_id = message->device_id;
+      if (device_id != kInterruptDeviceId) {
+        Device *device = GetDevice(device_id);
+        Port *port = device->port;
+        int device_flags = device->flags;
+        if (port == NULL || ((device->mask & device_flags) == 0)) {
+          // No relevant listener - drop the event.
         } else {
-          reinterpret_cast<PortMapping*>(data_)->RemovePort(port_id);
-          Send(port, value, true);
+          device->port = NULL;
+          Send(port, device_flags, true);
         }
       }
       osMailFree(queue, reinterpret_cast<void*>(message));

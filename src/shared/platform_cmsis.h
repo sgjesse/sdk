@@ -86,30 +86,54 @@ static const int kSemaphoreSize = sizeof(int32_t) * 2;
 osMailQId GetFletchMailQ();
 
 struct CmsisMessage {
-  uint32_t port_id;
-  int64 message;
-  uint32_t mask;
+  uint32_t device_id;
 };
 
-class Device {
+struct Device {
  public:
-  Device(Port *port, int mask, void* data)
-    : port(port), mask(mask), data(data) {}
+  Device(Port *port, uint32_t flags, uint32_t mask, void* data)
+    : port(port), mask(mask), data(data) {
+    this->flags.store(flags);
+  }
 
   // The port waiting for messages on this device
   Port *port;
 
+  // The current flags for this device.
+  fletch::Atomic<uint32_t> flags;
+
   // The mask for messages on this device.
-  int mask;
+  uint32_t mask;
 
   // Data associated with the device.
   void *data;
+
+  void AddFlag(uint32_t flag) {
+    uint32_t flags = this->flags;
+    bool success = false;
+    while (!success) {
+      uint32_t new_flags = flags | flag;
+      success = this->flags.compare_exchange_weak(flags, new_flags);
+    }
+  }
+
+  void RemoveFlag(uint32_t flag) {
+    uint32_t flags = this->flags;
+    bool success = false;
+    while (!success) {
+      uint32_t new_flags = flags & ~flag;
+      success = this->flags.compare_exchange_weak(flags, new_flags);
+    }
+  }
 };
 
-extern Vector<Device*> devices;
+Device *GetDevice(int device_id);
 
-int SendMessageCmsis(uint32_t port_id, int64_t message, uint32_t mask);
+// Send a message to the event handler, that an event has happened on
+// [device_id].
+int SendMessageCmsis(uint32_t device_id);
 
+// Installs [device] so it can be listened to by the event handler.
 int InstallDevice(Device *device);
 
 // Forward declare [Platform::GetMicroseconds].

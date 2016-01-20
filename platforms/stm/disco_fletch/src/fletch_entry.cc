@@ -18,23 +18,28 @@ extern unsigned char _binary_snapshot_start;
 extern unsigned char _binary_snapshot_end;
 extern unsigned char _binary_snapshot_size;
 
-extern "C" size_t UartRead(int port_id, uint8_t* buffer, size_t count) {
-  return GetUart(port_id)->Read(buffer, count);
-}
-
-extern "C" size_t UartWrite(int port_id, uint8_t* buffer, size_t count) {
-  return GetUart(port_id)->Write(buffer, count);
-}
-
-extern "C" size_t UartOpen(int port_id, uint8_t* buffer, size_t count) {
+extern "C" size_t UartOpen(int device_id, uint8_t* buffer, size_t count) {
   Uart *uart = new Uart();
   return uart->Open();
 }
 
+extern "C" size_t UartRead(int device_id, uint8_t* buffer, size_t count) {
+  return GetUart(device_id)->Read(buffer, count);
+}
+
+extern "C" size_t UartWrite(int device_id, uint8_t* buffer, size_t count) {
+  return GetUart(device_id)->Write(buffer, count);
+}
+
+extern "C" uint32_t UartGetError(int device_id) {
+  return GetUart(device_id)->GetError();
+}
+
 FLETCH_EXPORT_TABLE_BEGIN
+  FLETCH_EXPORT_TABLE_ENTRY("uart_open", UartOpen)
   FLETCH_EXPORT_TABLE_ENTRY("uart_read", UartRead)
   FLETCH_EXPORT_TABLE_ENTRY("uart_write", UartWrite)
-  FLETCH_EXPORT_TABLE_ENTRY("uart_open", UartOpen)
+  FLETCH_EXPORT_TABLE_ENTRY("uart_get_error", UartGetError)
   FLETCH_EXPORT_TABLE_ENTRY("BSP_LED_On", BSP_LED_On)
   FLETCH_EXPORT_TABLE_ENTRY("BSP_LED_Off", BSP_LED_Off)
 FLETCH_EXPORT_TABLE_END

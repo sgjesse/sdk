@@ -24,6 +24,7 @@ osMailQId GetFletchMailQ() {
   return fletchMailQ;
 }
 
+// All open devices are stored here.
 Vector<Device*> devices;
 
 int InstallDevice(Device *device) {
@@ -31,14 +32,17 @@ int InstallDevice(Device *device) {
   return devices.size() - 1;
 }
 
+Device *GetDevice(int device_id) {
+  return devices[device_id];
+}
+
 // Sends a message on the fletch osMailQ used by the event handler.
-int SendMessageCmsis(uint32_t port_id, int64_t message, uint32_t mask) {
+int SendMessageCmsis(uint32_t device_id) {
   CmsisMessage *cmsisMessage =
       reinterpret_cast<CmsisMessage*>(osMailAlloc(fletchMailQ, 0));
-  cmsisMessage->port_id = port_id;
-  cmsisMessage->message = message;
-  cmsisMessage->mask = mask;
-  return osMailPut(GetFletchMailQ(), reinterpret_cast<void*>(cmsisMessage));
+  cmsisMessage->device_id = device_id;
+  int r = osMailPut(GetFletchMailQ(), reinterpret_cast<void*>(cmsisMessage));
+  return r;
 }
 
 static uint64 time_launch;

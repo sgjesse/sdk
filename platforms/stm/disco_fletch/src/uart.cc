@@ -29,7 +29,7 @@ const int kErrorBit = 1 << 2;
 const int kRxBufferSize = 511;
 const int kTxBufferSize = 511;
 
-Uart::Uart() : device_(NULL, 0, this) {
+Uart::Uart() : device_(NULL, 0, 0, this) {
   uart_ = &huart1;
   read_buffer_ = new CircularBuffer(kRxBufferSize);
   write_buffer_ = new CircularBuffer(kTxBufferSize);
@@ -47,9 +47,7 @@ void UartTask(void *arg) {
 }
 
 int Uart::Open() {
-  ASSERT(port_id_ == 0);
-
-  port_id_ = fletch::InstallDevice(&device_);
+  device_id_ = fletch::InstallDevice(&device_);
   openUarts[uart_] = this;
 
   TaskHandle_t handle;
@@ -58,11 +56,15 @@ int Uart::Open() {
   // Start receiving.
   HAL_UART_Receive_IT(uart_, &read_data_, 1);
 
-  return port_id_;
+  return device_id_;
 }
 
 size_t Uart::Read(uint8_t* buffer, size_t count) {
-  return read_buffer_->Read(buffer, count, CircularBuffer::kDontBlock);
+  int c = read_buffer_->Read(buffer, count, CircularBuffer::kDontBlock);
+  if (read_buffer_->IsEmpty()) {
+    device_.RemoveFlag(kReceivedBit);
+  }
+  return c;
 }
 
 size_t Uart::Write(uint8_t* buffer, size_t count) {
@@ -72,6 +74,11 @@ size_t Uart::Write(uint8_t* buffer, size_t count) {
     EnsureTransmission();
   }
   return written_count;
+}
+
+uint32_t Uart::GetError() {
+  device_.RemoveFlag(kErrorBit);
+  return error_;
 }
 
 void Uart::EnsureTransmission() {
@@ -85,6 +92,8 @@ void Uart::EnsureTransmission() {
         LOG_ERROR("%d\n", status);
       }
       tx_pending_ = true;
+    } else {
+      device_.RemoveFlag(kTransmittedBit);
     }
   }
 }
@@ -92,41 +101,44 @@ void Uart::EnsureTransmission() {
 void Uart::Task() {
   // Process notifications from the interrupt handlers.
   for (;;) {
-    // Wait for an interrupt to be processed.
-    printf("Waiting\n");
+    // Wait for an event to process.
     xSemaphoreTake(semaphore_, portMAX_DELAY);
     uint32_t flags = interrupt_flags.exchange(0);
-    printf("Waking up %d\n", flags);
     if ((flags & kReceivedBit) != 0) {
       // Don't block when writing to the buffer. Buffer overrun will
       // cause lost data.
       read_buffer_->Write(&read_data_, 1, CircularBuffer::kDontBlock);
-      printf("Setting up new read\n");
+      device_.AddFlag(kReceivedBit);
       HAL_StatusTypeDef status = HAL_UART_Receive_IT(uart_, &read_data_, 1);
       if (status != HAL_OK) {
         LOG_ERROR("%d\n", status);
       }
-      SendMessage(flags);
+      SendMessage();
     }
     if ((flags & kTransmittedBit) != 0) {
+      device_.AddFlag(kTransmittedBit);
       fletch::ScopedLock lock(tx_mutex_);
       tx_pending_ = false;
       EnsureTransmission();
       if (!write_buffer_->IsFull()) {
-        SendMessage(flags);
+        SendMessage();
       }
     }
-    // XXX handle errors.
+    if ((flags & kErrorBit) != 0) {
+      device_.AddFlag(kErrorBit);
+      SendMessage();
+    }
   }
 }
 
-void Uart::SendMessage(uint32_t msg) {
-  printf("Sending message %d\n", msg);
-  fletch::SendMessageCmsis(port_id_, msg, msg);
+void Uart::SendMessage() {
+  if ((device_.port != NULL) && ((device_.flags & device_.mask) != 0)) {
+    fletch::SendMessageCmsis(device_id_);
+  }
 }
 
-Uart *GetUart(int port_id) {
-  return reinterpret_cast<Uart*>(fletch::devices[port_id]->data);
+Uart *GetUart(int device_id) {
+  return reinterpret_cast<Uart*>(fletch::GetDevice(device_id)->data);
 }
 
 // Shared return from interrupt handler. Will set the specified flag
@@ -147,23 +159,24 @@ void Uart::ReturnFromInterrupt(uint32_t flag) {
 }
 
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  printf("rxcallback\n");
   Uart *uart = openUarts[huart];
   uart->ReturnFromInterrupt(kReceivedBit);
 }
 
 extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-//  printf("txcallback\n");
   Uart *uart = openUarts[huart];
   uart->ReturnFromInterrupt(kTransmittedBit);
 }
 
 extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-    HAL_UART_GetError(huart);
-
+   Uart *uart = openUarts[huart];
+   uart->error_ = HAL_UART_GetError(huart);
+   LOG_ERROR("UART Error %d\n", uart->error_);
   // Clear all errors.
   __HAL_UART_CLEAR_OREFLAG(huart);
   __HAL_UART_CLEAR_FEFLAG(huart);
   __HAL_UART_CLEAR_PEFLAG(huart);
   __HAL_UART_CLEAR_NEFLAG(huart);
+
+   uart->ReturnFromInterrupt(kErrorBit);
 }

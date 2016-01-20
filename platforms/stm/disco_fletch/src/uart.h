@@ -19,7 +19,7 @@
 // Interface to the universal asynchronous receiver/transmitter (UART).
 class Uart {
  public:
-  // Access the UART on the first UART port.
+  // Access theq UART on the first UART port.
   Uart();
 
   // Opens the uart. Returns the port id used for listening.

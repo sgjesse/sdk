@@ -11,6 +11,8 @@ namespace fletch {
 
 enum RegisterSize { kLongRegister = 'l', kQuadRegister = 'q' };
 
+int Label::position_counter_ = 0;
+
 void Assembler::j(Condition condition, Label* label) {
   static const char* kConditionMnemonics[] = {
       "o",   // OVERFLOW
@@ -32,7 +34,7 @@ void Assembler::j(Condition condition, Label* label) {
   };
   ASSERT(static_cast<unsigned>(condition) < ARRAY_SIZE(kConditionMnemonics));
   const char* mnemonic = kConditionMnemonics[condition];
-  printf("\tj%s L%d\n", mnemonic, ComputeLabelPosition(label));
+  printf("\tj%s %s%d\n", mnemonic, kLocalLabelPrefix, label->position());
 }
 
 void Assembler::SwitchToText() { puts("\n\t.text"); }
@@ -44,11 +46,11 @@ void Assembler::AlignToPowerOfTwo(int power) {
 }
 
 void Assembler::jmp(Label* label) {
-  printf("\tjmp L%d\n", ComputeLabelPosition(label));
+  printf("\tjmp %s%d\n", kLocalLabelPrefix, label->position());
 }
 
 void Assembler::Bind(Label* label) {
-  printf("L%d:\n", ComputeLabelPosition(label));
+  printf("%s%d:\n", kLocalLabelPrefix, label->position());
 }
 
 void Assembler::BindWithPowerOfTwoAlignment(const char* name, int power) {
@@ -62,8 +64,9 @@ static const char* ToString(Register reg, RegisterSize size = kQuadRegister) {
       "%r8d", "%r9d", "%r10d", "%r11d", "%r12d", "%r13d", "%r14d", "%r15d"};
   static const char* kQuadRegisterNames[] = {
       "%rax", "%rcx", "%rdx", "%rbx", "%rsp", "%rbp", "%rsi", "%rdi",
-      "%r8",  "%r9",  "%r10", "%r11", "%r12", "%r13", "%r14", "%r15"};
-  ASSERT(reg >= RAX && reg <= R15);
+      "%r8",  "%r9",  "%r10", "%r11", "%r12", "%r13", "%r14", "%r15",
+      "%rip"};
+  ASSERT(reg >= RAX && reg <= RIP);
   switch (size) {
     case kLongRegister:
       return kLongRegisterNames[reg];
@@ -72,6 +75,10 @@ static const char* ToString(Register reg, RegisterSize size = kQuadRegister) {
   }
   UNREACHABLE();
   return NULL;
+}
+
+void Assembler::movq(Register reg, Label* label) {
+  Print("leaq %s%d(%%rip), %rq", kLocalLabelPrefix, label->position(), reg);
 }
 
 void Assembler::Print(const char* format, ...) {
@@ -112,6 +119,16 @@ void Assembler::Print(const char* format, ...) {
           // 64-bit immediate. Only used for movq instructions.
           const Immediate* immediate = va_arg(arguments, const Immediate*);
           printf("$%ld", immediate->value());
+          break;
+        }
+
+        case 'd': {
+          printf("%d", va_arg(arguments, int));
+          break;
+        }
+
+        case 's': {
+          printf("%s", va_arg(arguments, const char*));
           break;
         }
 
@@ -179,12 +196,27 @@ void Assembler::PrintAddress(const Address* address) {
   }
 }
 
-int Assembler::ComputeLabelPosition(Label* label) {
-  if (!label->IsBound()) {
-    static int labels = 0;
-    label->BindTo(++labels);
-  }
-  return label->position();
+const char* Assembler::ConditionMnemonic(Condition condition) {
+  static const char* kConditionMnemonics[] = {
+      "o",   // OVERFLOW
+      "no",  // NO_OVERFLOW
+      "b",   // BELOW
+      "ae",  // ABOVE_EQUAL
+      "e",   // EQUAL
+      "ne",  // NOT_EQUAL
+      "be",  // BELOW_EQUAL
+      "a",   // ABOVE
+      "s",   // SIGN
+      "ns",  // NOT_SIGN
+      "p",   // PARITY_EVEN
+      "np",  // PARITY_ODD
+      "l",   // LESS
+      "ge",  // GREATER_EQUAL
+      "le",  // LESS_EQUAL
+      "g"    // GREATER
+  };
+  ASSERT(static_cast<unsigned>(condition) < ARRAY_SIZE(kConditionMnemonics));
+  return kConditionMnemonics[condition];
 }
 
 }  // namespace fletch

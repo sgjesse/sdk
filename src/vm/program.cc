@@ -15,6 +15,7 @@
 #include "src/shared/selectors.h"
 #include "src/shared/utils.h"
 
+#include "src/vm/frame.h"
 #include "src/vm/heap_validator.h"
 #include "src/vm/mark_sweep.h"
 #include "src/vm/native_interpreter.h"
@@ -52,7 +53,8 @@ Program::Program(ProgramSource source, int hashtag)
       program_exit_listener_(NULL),
       program_exit_listener_data_(NULL),
       exit_kind_(Signal::kTerminated),
-      hashtag_(hashtag) {
+      hashtag_(hashtag),
+      stack_chain_(NULL) {
 // These asserts need to hold when running on the target, but they don't need
 // to hold on the host (the build machine, where the interpreter-generating
 // program runs).  We put these asserts here on the assumption that the
@@ -113,11 +115,15 @@ Process* Program::ProcessSpawnForMain() {
   Stack* stack = process->stack();
   uint8_t* bcp = entry->bytecode_address_for(0);
   word top = stack->length();
-  stack->set(--top, Smi::FromWord(main_arity));
-  // Push empty slot, fp and bcp.
   stack->set(--top, NULL);
   stack->set(--top, NULL);
   Object** frame_pointer = stack->Pointer(top);
+  stack->set(--top, NULL);
+  stack->set(--top, Smi::FromWord(main_arity));
+  // Push empty slot, fp and bcp.
+  stack->set(--top, NULL);
+  stack->set(--top, reinterpret_cast<Object*>(frame_pointer));
+  frame_pointer = stack->Pointer(top);
   stack->set(--top, reinterpret_cast<Object*>(bcp));
   stack->set(--top, reinterpret_cast<Object*>(InterpreterEntry));
   stack->set(--top, reinterpret_cast<Object*>(frame_pointer));
@@ -162,14 +168,11 @@ void Program::VisitProcesses(ProcessVisitor* visitor) {
   }
 }
 
+// TODO(erikcorry): Remove.
 void Program::VisitProcessHeaps(ProcessVisitor* visitor) {
-#ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-  VisitProcesses(visitor);
-#else
   if (process_list_head_ != NULL) {
     visitor->VisitProcess(process_list_head_);
   }
-#endif
 }
 
 Object* Program::CreateArrayWith(int capacity, Object* initial_value) {
@@ -279,14 +282,6 @@ class ValidateProcessHeapVisitor : public ProcessVisitor {
   SharedHeap* shared_heap_;
 };
 
-class CollectGarbageAndChainStacksVisitor : public ProcessVisitor {
- public:
-  virtual void VisitProcess(Process* process) {
-    int number_of_stacks = process->CollectGarbageAndChainStacks();
-    process->CookStacks(number_of_stacks);
-  }
-};
-
 void Program::PrepareProgramGC() {
   // All threads are stopped and have given their parts back to the
   // [SharedHeap], so we can merge them now.
@@ -301,9 +296,25 @@ void Program::PrepareProgramGC() {
     VisitProcesses(&visitor);
   }
 
-  // Cook all stacks.
-  CollectGarbageAndChainStacksVisitor visitor;
-  VisitProcessHeaps(&visitor);
+  // We need to perform a precise GC to get rid of floating garbage stacks.
+  // This is done by:
+  // 1) An old-space GC, which is precise for global reachability.
+  PerformSharedGarbageCollection();
+  //    Old-space GC ignores the liveness information it has gathered in
+  //    new-space, so this doesn't actually clean up the dead objects in
+  //    new-space, so we do:
+  // 2) A new-space GC, which will be precise, due to the old-space GC.
+  //    (No floating garbage with pointers from old- to new-space.)
+  CollectNewSpace();
+  //    Now we have no floating garbage stacks.  We do:
+  // 3) An old-space GC which (in the generational config) will find no
+  //    garbage, but as a side effect it will chain up all the stacks (also
+  //    the ones in new-space).  This does not move new-space objects.
+  // TODO(erikcorry): An future simplification is to cook the stacks as we
+  // find them during the program GC, instead of chaining them up beforehand
+  // during a GC that is not needed in the generational config.
+  int number_of_stacks = CollectMutableGarbageAndChainStacks();
+  CookStacks(number_of_stacks);
 }
 
 class IterateProgramPointersVisitor : public ProcessVisitor {
@@ -332,7 +343,7 @@ class IterateProgramPointersHeapVisitor : public ProcessVisitor {
   PointerVisitor* pointer_visitor_;
 };
 
-void Program::PerformProgramGC(Space* to, PointerVisitor* visitor) {
+void Program::PerformProgramGC(SemiSpace* to, PointerVisitor* visitor) {
   {
     NoAllocationFailureScope scope(to);
 
@@ -364,10 +375,9 @@ class FinishProgramGCVisitor : public ProcessVisitor {
       : shared_heap_(shared_heap) {}
 
   virtual void VisitProcess(Process* process) {
-    // Uncook process
-    process->UncookAndUnchainStacks();
     process->UpdateBreakpoints();
     if (Flags::validate_heaps) {
+      // TODO(erikcorry): This should not be on the process.
       process->ValidateHeaps(shared_heap_);
     }
   }
@@ -377,8 +387,10 @@ class FinishProgramGCVisitor : public ProcessVisitor {
 };
 
 void Program::FinishProgramGC() {
+  // Uncook process
+  UncookAndUnchainStacks();
   FinishProgramGCVisitor visitor(&shared_heap_);
-  VisitProcessHeaps(&visitor);
+  VisitProcesses(&visitor);
 
   if (Flags::validate_heaps) {
     ValidateGlobalHeapsAreConsistent();
@@ -416,17 +428,6 @@ void Program::ValidateHeapsAreConsistent() {
   }
 }
 
-#ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-
-void Program::ValidateSharedHeap() {
-  SharedHeapPointerValidator validator(heap(), &shared_heap_);
-  HeapObjectPointerVisitor object_pointer_visitor(&validator);
-  shared_heap_.heap()->IterateObjects(&object_pointer_visitor);
-  shared_heap_.heap()->VisitWeakObjectPointers(&validator);
-}
-
-#else
-
 void Program::ValidateSharedHeap() {
   // NOTE: We do nothing in the case of *one* shared heap. The shared heap will
   // get validated (redundantly) for each process.
@@ -436,23 +437,13 @@ void Program::ValidateSharedHeap() {
   //  per-process basis ATM. So we just do it redundantly for now.)
 }
 
-#endif  // #ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-
 void Program::CollectGarbage() {
-  if (scheduler() != NULL) {
-    scheduler()->StopProgram(this);
-  }
-
-  Space* to = new Space(heap_.space()->Used() / 10);
+  SemiSpace* to = new SemiSpace(heap_.space()->Used() / 10);
   ScavengeVisitor scavenger(heap_.space(), to);
 
   PrepareProgramGC();
   PerformProgramGC(to, &scavenger);
   FinishProgramGC();
-
-  if (scheduler() != NULL) {
-    scheduler()->ResumeProgram(this);
-  }
 }
 
 void Program::AddToProcessList(Process* process) {
@@ -488,33 +479,30 @@ struct SharedHeapUsage {
   uint64 timestamp = 0;
   uword shared_used = 0;
   uword shared_size = 0;
+  uword shared_used_2 = 0;
+  uword shared_size_2 = 0;
 };
 
 static void GetSharedHeapUsage(Heap* heap, SharedHeapUsage* heap_usage) {
   heap_usage->timestamp = Platform::GetMicroseconds();
   heap_usage->shared_used = heap->space()->Used();
   heap_usage->shared_size = heap->space()->Size();
+  heap_usage->shared_used_2 = heap->old_space()->Used();
+  heap_usage->shared_size_2 = heap->old_space()->Size();
 }
 
-static void PrintImmutableGCInfo(SharedHeapUsage* before,
-                                 SharedHeapUsage* after) {
+static void PrintProgramGCInfo(SharedHeapUsage* before,
+                               SharedHeapUsage* after) {
   static int count = 0;
   Print::Error(
-      "Immutable-GC(%i): "
-      "\t%lli us, "
-      "\t%lu/%lu -> %lu/%lu\n",
-      count++, after->timestamp - before->timestamp, before->shared_used,
-      before->shared_size, after->shared_used, after->shared_size);
+      "Old-space-GC(%i):   "
+      "\t%lli us,   "
+      "\t\t\t\t\t%lu/%lu -> %lu/%lu\n",
+      count++, after->timestamp - before->timestamp, before->shared_used_2,
+      before->shared_size_2, after->shared_used_2, after->shared_size_2);
 }
 
-void Program::CollectSharedGarbage(bool program_is_stopped) {
-  Scheduler* scheduler = this->scheduler();
-  ASSERT(scheduler != NULL);
-
-  if (!program_is_stopped) {
-    scheduler->StopProgram(this);
-  }
-
+void Program::CollectSharedGarbage() {
   // All threads are stopped and have given their parts back to the
   // [SharedHeap], so we can merge them now.
   shared_heap()->MergeParts();
@@ -533,128 +521,53 @@ void Program::CollectSharedGarbage(bool program_is_stopped) {
   if (Flags::print_heap_statistics) {
     SharedHeapUsage usage_after;
     GetSharedHeapUsage(shared_heap()->heap(), &usage_after);
-    PrintImmutableGCInfo(&usage_before, &usage_after);
+    PrintProgramGCInfo(&usage_before, &usage_after);
   }
 
   if (Flags::validate_heaps) {
     ValidateHeapsAreConsistent();
   }
-
-  if (!program_is_stopped) {
-    scheduler->ResumeProgram(this);
-  }
 }
 
-#ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-
 void Program::PerformSharedGarbageCollection() {
-  // Pass 1: Storebuffer compaction.
-  // We do this as a separate pass to ensure the mutable collection can access
-  // all objects (including immutable ones) and for example do
-  // "ASSERT(object->IsImmutable()". If we did everthing in one pass some
-  // immutable objects will contain forwarding pointers and others won't, which
-  // can make the mentioned assert just crash the program.
-  CompactStorebuffers();
-
-  // Pass 2: Iterate all process roots to the shared heap.
+  // Mark all reachable objects.  We mark all live objects in new-space too, to
+  // detect liveness paths that go through new-space, but we just clear the
+  // mark bits afterwards.  Dead objects in new-space are only cleared in a
+  // new-space GC (scavenge).
   Heap* heap = shared_heap()->heap();
-  Space* from = heap->space();
-  Space* to = new Space(from->Used() / 10);
-  NoAllocationFailureScope alloc(to);
-
-  ScavengeVisitor scavenger(from, to);
-
-  int process_heap_sizes = 0;
-  for (Process* process = process_list_head_; process != NULL;
-       process = process->process_list_next()) {
-    process->TakeChildHeaps();
-    process->IterateRoots(&scavenger);
-    process->store_buffer()->IteratePointersToImmutableSpace(&scavenger);
-    process_heap_sizes += process->heap()->space()->Used();
-  }
-
-  to->CompleteScavenge(&scavenger);
-  heap->ProcessWeakPointers();
-  heap->ReplaceSpace(to);
-
-  shared_heap()->UpdateLimitAfterGC(process_heap_sizes);
-}
-
-#else  // #ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-
-#ifdef FLETCH_MARK_SWEEP
-
-void Program::PerformSharedGarbageCollection() {
-  // Mark all reachable objects.
-  Heap* heap = shared_heap()->heap();
-  Space* space = heap->space();
+  OldSpace* old_space = heap->old_space();
+  SemiSpace* new_space = heap->space();
   MarkingStack stack;
-  MarkingVisitor marking_visitor(space, &stack);
+  MarkingVisitor marking_visitor(new_space, old_space, &stack);
   for (Process* process = process_list_head_; process != NULL;
        process = process->process_list_next()) {
-    process->TakeChildHeaps();
     process->IterateRoots(&marking_visitor);
   }
   stack.Process(&marking_visitor);
-  heap->ProcessWeakPointers();
+  heap->ProcessWeakPointers(old_space);
 
   for (Process* process = process_list_head_; process != NULL;
        process = process->process_list_next()) {
-    process->set_ports(Port::CleanupPorts(space, process->ports()));
+    process->set_ports(Port::CleanupPorts(old_space, process->ports()));
   }
 
-  // Flush outstanding free_list chunks into the free list. Then sweep
-  // over the heap and rebuild the freelist.
-  space->Flush();
-  SweepingVisitor sweeping_visitor(space->free_list());
-  space->IterateObjects(&sweeping_visitor);
+  // Sweep over the old-space and rebuild the freelist.
+  SweepingVisitor sweeping_visitor(old_space->free_list());
+  old_space->IterateObjects(&sweeping_visitor);
+
+  new_space->Flush();
+  // We don't pass a free list so this visitor just clears the mark bits
+  // without making free list entries.
+  SweepingVisitor newspace_visitor(NULL);
+  new_space->IterateObjects(&newspace_visitor);
 
   for (Process* process = process_list_head_; process != NULL;
        process = process->process_list_next()) {
     process->UpdateStackLimit();
   }
 
-  space->set_used(sweeping_visitor.used());
-  heap->AdjustAllocationBudget();
-}
-
-#else  // #ifdef FLETCH_MARK_SWEEP
-
-void Program::PerformSharedGarbageCollection() {
-  Heap* heap = shared_heap()->heap();
-  Space* from = heap->space();
-  Space* to = new Space(from->Used() / 10);
-  NoAllocationFailureScope alloc(to);
-
-  ScavengeVisitor scavenger(from, to);
-
-  for (Process* process = process_list_head_; process != NULL;
-       process = process->process_list_next()) {
-    process->TakeChildHeaps();
-    process->IterateRoots(&scavenger);
-  }
-
-  to->CompleteScavenge(&scavenger);
-  heap->ProcessWeakPointers();
-
-  for (Process* process = process_list_head_; process != NULL;
-       process = process->process_list_next()) {
-    process->set_ports(Port::CleanupPorts(from, process->ports()));
-    process->UpdateStackLimit();
-  }
-
-  heap->ReplaceSpace(to);
-}
-
-#endif  // #ifdef FLETCH_MARK_SWEEP
-
-#endif  // #ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-
-void Program::CompactStorebuffers() {
-  for (Process* process = process_list_head_; process != NULL;
-       process = process->process_list_next()) {
-    process->store_buffer()->Deduplicate();
-  }
+  old_space->set_used(sweeping_visitor.used());
+  heap->AdjustOldAllocationBudget();
 }
 
 class StatisticsVisitor : public HeapObjectVisitor {
@@ -1029,7 +942,7 @@ void Program::ClearDispatchTableIntrinsics() {
   for (int i = 0; i < length; i++) {
     Object* element = table->get(i);
     DispatchTableEntry* entry = DispatchTableEntry::cast(element);
-    entry->set_target(NULL);
+    entry->set_code(NULL);
   }
 }
 
@@ -1040,29 +953,236 @@ void Program::SetupDispatchTableIntrinsics(IntrinsicsTable* intrinsics) {
   int length = table->length();
   int hits = 0;
 
-  static const Names::Id name = Names::kNoSuchMethodTrampoline;
-  Function* trampoline =
-      object_class()->LookupMethod(Selector::Encode(name, Selector::METHOD, 0));
+  DispatchTableEntry* entry = DispatchTableEntry::cast(table->get(0));
+  Function* trampoline = entry->target();
 
   for (int i = 0; i < length; i++) {
     Object* element = table->get(i);
     DispatchTableEntry* entry = DispatchTableEntry::cast(element);
-    if (entry->target() != NULL) {
+    if (entry->code() != NULL) {
       // The intrinsic is already set.
       hits++;
       continue;
     }
-    Function* function = entry->function();
-    if (function == trampoline) continue;
-    hits++;
-    void* intrinsic = function->ComputeIntrinsic(intrinsics);
-    entry->set_target(intrinsic);
+    Function* target = entry->target();
+    if (target != trampoline) hits++;
+    void* code = target->ComputeIntrinsic(intrinsics);
+    if (code == NULL) {
+      code = reinterpret_cast<void*>(InterpreterMethodEntry);
+    }
+    entry->set_code(code);
   }
 
   if (Flags::print_program_statistics) {
     Print::Out("Dispatch table fill: %F%% (%i of %i)\n", hits * 100.0 / length,
                hits, length);
   }
+}
+
+struct HeapUsage {
+  uint64 timestamp = 0;
+  uword process_used = 0;
+  uword process_size = 0;
+  uword immutable_used = 0;
+  uword immutable_size = 0;
+  uword program_used = 0;
+  uword program_size = 0;
+
+  uword TotalUsed() { return process_used + immutable_used + program_used; }
+  uword TotalSize() { return process_used + immutable_size + program_size; }
+};
+
+static void GetHeapUsage(Heap* heap, HeapUsage* heap_usage) {
+  heap_usage->timestamp = Platform::GetMicroseconds();
+  heap_usage->process_used = heap->space()->Used();
+  heap_usage->process_size = heap->space()->Size();
+  heap_usage->program_used = heap->old_space()->Used();
+  heap_usage->program_size = heap->old_space()->Size();
+}
+
+void PrintProcessGCInfo(HeapUsage* before, HeapUsage* after) {
+  static int count = 0;
+  if ((count & 0xF) == 0) {
+    Print::Error(
+        "New-space-GC,\t\tElapsed, "
+        "\tNew-space use/sizeu,"
+        "\t\tOld-space use/size\n");
+  }
+  Print::Error(
+      "New-space-GC(%i): "
+      "\t%lli us,   "
+      "\t%lu/%lu -> %lu/%lu,   "
+      "\t%lu/%lu -> %lu/%lu\n",
+      count++, after->timestamp - before->timestamp, before->process_used,
+      before->process_size, after->process_used, after->process_size,
+      before->program_used, before->program_size, after->program_used,
+      after->program_size);
+}
+
+// Somewhat misnamed - it does a scavenge of the data area used by the
+// processes, not the code area used by the program.
+void Program::CollectNewSpace() {
+  HeapUsage usage_before;
+
+  Heap* data_heap = shared_heap()->heap();
+
+  SemiSpace* from = data_heap->space();
+  OldSpace* old = data_heap->old_space();
+
+  if (!data_heap->allocations_have_taken_place()) {
+    return;
+  }
+
+  old->Flush();
+  from->Flush();
+
+  if (Flags::print_heap_statistics) {
+    GetHeapUsage(data_heap, &usage_before);
+  }
+
+  SemiSpace* to = new SemiSpace(from->Used() / 10);
+
+  // While garbage collecting, do not fail allocations. Instead grow
+  // the to-space as needed.
+  NoAllocationFailureScope scope(to);
+  NoAllocationFailureScope scope2(old);
+
+  GenerationalScavengeVisitor visitor(from, to, old);
+  to->StartScavenge();
+  old->StartScavenge();
+
+  Process* current = process_list_head_;
+  while (current != NULL) {
+    current->IterateRoots(&visitor);
+    current = current->process_list_next();
+  }
+
+  old->VisitRememberedSet(&visitor);
+
+  bool work_found = true;
+  while (work_found) {
+    work_found = to->CompleteScavengeGenerational(&visitor);
+    work_found |= old->CompleteScavengeGenerational(&visitor);
+  }
+  old->EndScavenge();
+
+  data_heap->ProcessWeakPointers(from);
+
+  current = process_list_head_;
+  while (current != NULL) {
+    current->set_ports(Port::CleanupPorts(from, current->ports()));
+    current = current->process_list_next();
+  }
+
+  // Second space argument is used to size the new-space.
+  data_heap->ReplaceSpace(to, old);
+
+  if (Flags::print_heap_statistics) {
+    HeapUsage usage_after;
+    GetHeapUsage(data_heap, &usage_after);
+    PrintProcessGCInfo(&usage_before, &usage_after);
+  }
+
+  if (old->needs_garbage_collection()) {
+    CollectSharedGarbage();
+  }
+
+  UpdateStackLimits();
+}
+
+void Program::UpdateStackLimits() {
+  Process* current = process_list_head_;
+  while (current != NULL) {
+    current->UpdateStackLimit();
+    current = current->process_list_next();
+  }
+}
+
+int Program::CollectMutableGarbageAndChainStacks() {
+  // Mark all reachable objects.
+  OldSpace* old_space = shared_heap()->heap()->old_space();
+  SemiSpace* new_space = shared_heap()->heap()->space();
+  MarkingStack marking_stack;
+  ASSERT(stack_chain_ == NULL);
+  MarkingVisitor marking_visitor(new_space, old_space, &marking_stack,
+                                 &stack_chain_);
+
+  // All processes share the same heap, so we need to iterate all roots from
+  // all processes.
+  for (Process* process = process_list_head_; process != NULL;
+       process = process->process_list_next()) {
+    process->IterateRoots(&marking_visitor);
+  }
+
+  marking_stack.Process(&marking_visitor);
+
+  // Weak processing.
+  shared_heap()->heap()->ProcessWeakPointers(old_space);
+  for (Process* process = process_list_head_; process != NULL;
+       process = process->process_list_next()) {
+    process->set_ports(Port::CleanupPorts(old_space, process->ports()));
+  }
+
+  // Flush outstanding free_list chunks into the free list. Then sweep
+  // over the heap and rebuild the freelist.
+  old_space->Flush();
+  SweepingVisitor sweeping_visitor(old_space->free_list());
+  old_space->IterateObjects(&sweeping_visitor);
+
+  // TODO(erikcorry): Find a better way to delete the mark bits on the new
+  // space.
+  SweepingVisitor new_space_sweeper(NULL);
+  new_space->IterateObjects(&new_space_sweeper);
+
+  UpdateStackLimits();
+  return marking_visitor.number_of_stacks();
+}
+
+void Program::CookStacks(int number_of_stacks) {
+  cooked_stack_deltas_ = List<List<int>>::New(number_of_stacks);
+  Object* raw_current = stack_chain_;
+  for (int i = 0; i < number_of_stacks; ++i) {
+    Stack* current = Stack::cast(raw_current);
+    int number_of_frames = 0;
+    for (Frame count_frames(current); count_frames.MovePrevious();) {
+      number_of_frames++;
+    }
+    cooked_stack_deltas_[i] = List<int>::New(number_of_frames);
+    int index = 0;
+    for (Frame frame(current); frame.MovePrevious();) {
+      Function* function = frame.FunctionFromByteCodePointer();
+      if (function == NULL) continue;
+      uint8* start = function->bytecode_address_for(0);
+      int delta = frame.ByteCodePointer() - start;
+      cooked_stack_deltas_[i][index++] = delta;
+      frame.SetByteCodePointer(reinterpret_cast<uint8*>(function));
+    }
+    raw_current = current->next();
+  }
+  ASSERT(raw_current == Smi::zero());
+}
+
+void Program::UncookAndUnchainStacks() {
+  Object* raw_current = stack_chain_;
+  for (int i = 0; i < cooked_stack_deltas_.length(); ++i) {
+    Stack* current = Stack::cast(raw_current);
+    int index = 0;
+    Frame frame(current);
+    while (frame.MovePrevious()) {
+      Object* value = reinterpret_cast<Object*>(frame.ByteCodePointer());
+      if (value == NULL) continue;
+      int delta = cooked_stack_deltas_[i][index++];
+      Function* function = Function::cast(value);
+      uint8* bcp = function->bytecode_address_for(0) + delta;
+      frame.SetByteCodePointer(bcp);
+    }
+    cooked_stack_deltas_[i].Delete();
+    raw_current = current->next();
+    current->set_next(Smi::FromWord(0));
+  }
+  ASSERT(raw_current == Smi::zero());
+  cooked_stack_deltas_.Delete();
+  stack_chain_ = NULL;
 }
 
 }  // namespace fletch

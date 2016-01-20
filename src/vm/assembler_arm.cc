@@ -11,11 +11,23 @@
 
 namespace fletch {
 
+int Label::position_counter_ = 0;
+
 static const char* ConditionToString(Condition cond) {
   static const char* kConditionNames[] = {"eq", "ne", "cs", "cc", "mi",
                                           "pl", "vs", "vc", "hi", "ls",
                                           "ge", "lt", "gt", "le", ""};
   return kConditionNames[cond];
+}
+
+void Assembler::LoadInt(Register reg, int value) {
+  if (value >= 0 && value <= 255) {
+    mov(reg, Immediate(value));
+  } else if (value < 0 && value >= -256) {
+    mvn(reg, Immediate(-(value + 1)));
+  } else {
+    ldr(reg, Immediate(value));
+  }
 }
 
 void Assembler::BindWithPowerOfTwoAlignment(const char* name, int power) {
@@ -28,11 +40,6 @@ void Assembler::AlignToPowerOfTwo(int power) {
 }
 
 void Assembler::Bind(Label* label) {
-  if (label->IsUnused()) {
-    label->BindTo(NewLabelPosition());
-  } else {
-    label->BindTo(label->position());
-  }
   printf(".L%d:\n", label->position());
 }
 
@@ -95,7 +102,6 @@ void Assembler::Print(const char* format, ...) {
 
         case 'l': {
           Label* label = va_arg(arguments, Label*);
-          if (label->IsUnused()) label->LinkTo(NewLabelPosition());
           printf(".L%d", label->position());
           break;
         }
@@ -182,11 +188,6 @@ static const char* ShiftTypeToString(ShiftType type) {
 void Assembler::PrintOperand(const Operand* operand) {
   printf("%s, %s #%d", ToString(operand->reg()),
          ShiftTypeToString(operand->shift_type()), operand->shift_amount());
-}
-
-int Assembler::NewLabelPosition() {
-  static int labels = 0;
-  return labels++;
 }
 
 }  // namespace fletch

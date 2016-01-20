@@ -27,7 +27,7 @@ vars = {
   # 2. update package revisions below.
   # 3. Upload new binaries and update the `third_party/bin` sha-hash-files as
   #    described in `third_party/bin/README.md`.
-  "dart_rev": "@d2e77fb81d529a236f916ea9a5e9ff5da3a50b56",
+  "dart_rev": "@57d1236a9c1d4bcdd3984461cabfcc464b3c0055",
 
   # Please copy these package revisions from ../dart/DEPS when updating
   # dart_rev:
@@ -237,6 +237,38 @@ hooks = [
       '-u',
       '--auto_platform',
       'fletch/third_party/openocd',
+    ],
+  },
+  {
+    'name': 'third_party_gcc_arm_embedded',
+    'pattern': '.',
+    'action': [
+      'download_from_google_storage',
+      '-q',
+      '--no_auth',
+      '--no_resume',
+      '--bucket',
+      'dart-dependencies-fletch',
+      '-d',
+      '-r',
+      '-u',
+      '--auto_platform',
+      'fletch/third_party/gcc-arm-embedded',
+    ],
+  },
+  {
+    'name': 'third_party_stm',
+    'pattern': '.',
+    'action': [
+      'download_from_google_storage',
+      '-q',
+      '--no_auth',
+      '--no_resume',
+      '--bucket',
+      'dart-dependencies-fletch',
+      '-d',
+      '-u',
+      'fletch/third_party/stm',
     ],
   },
   # Pull clang-format binaries using checked-in hashes.

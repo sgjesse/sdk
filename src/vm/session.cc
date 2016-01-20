@@ -22,12 +22,15 @@
 #include "src/vm/snapshot.h"
 #include "src/vm/thread.h"
 
-#define GC_AND_RETRY_ON_ALLOCATION_FAILURE(var, exp) \
-  Object* var = (exp);                               \
-  if (var->IsRetryAfterGCFailure()) {                \
-    program()->CollectGarbage();                     \
-    var = (exp);                                     \
-    ASSERT(!var->IsFailure());                       \
+#define GC_AND_RETRY_ON_ALLOCATION_FAILURE(var, exp)            \
+  Object* var = (exp);                                          \
+  if (var->IsRetryAfterGCFailure()) {                           \
+    Scheduler* scheduler = program()->scheduler();              \
+    if (scheduler != NULL) scheduler->StopProgram(program());   \
+    program()->CollectGarbage();                                \
+    if (scheduler != NULL) scheduler->ResumeProgram(program()); \
+    var = (exp);                                                \
+    ASSERT(!var->IsFailure());                                  \
   }
 
 namespace fletch {
@@ -449,7 +452,9 @@ void Session::ProcessMessages() {
         Stack* stack = process_->stack();
         Frame frame(stack);
         for (int i = 0; i <= frame_index; i++) frame.MovePrevious();
-        Object* local = stack->get(frame.FirstLocalIndex() - slot);
+        word index = frame.FirstLocalIndex() - slot;
+        if (index < frame.LastLocalIndex()) FATAL("Illegal slot offset");
+        Object* local = stack->get(index);
         if (opcode == Connection::kProcessLocalStructure &&
             local->IsInstance()) {
           SendInstanceStructure(Instance::cast(local));
@@ -511,8 +516,8 @@ void Session::ProcessMessages() {
         StoppedGcThreadScope scope(program()->scheduler());
         // TODO(ager): Potentially optimize this to not require a full
         // process GC to locate the live stacks?
-        int number_of_stacks = process_->CollectGarbageAndChainStacks();
-        Object* current = process_->stack();
+        int number_of_stacks = program()->CollectMutableGarbageAndChainStacks();
+        Object* current = program()->stack_chain();
         for (int i = 0; i < number_of_stacks; i++) {
           Stack* stack = Stack::cast(current);
           AddToMap(fibers_map_id_, i, stack);
@@ -521,6 +526,7 @@ void Session::ProcessMessages() {
           stack->set_next(Smi::FromWord(0));
         }
         ASSERT(current == NULL);
+        program()->ClearStackChain();
         WriteBuffer buffer;
         buffer.WriteInt(number_of_stacks);
         connection_->Send(Connection::kProcessNumberOfStacks, buffer);
@@ -545,7 +551,10 @@ void Session::ProcessMessages() {
       }
 
       case Connection::kCollectGarbage: {
+        Scheduler* scheduler = program()->scheduler();
+        if (scheduler != NULL) scheduler->StopProgram(program());
         program()->CollectGarbage();
+        if (scheduler != NULL) scheduler->ResumeProgram(program());
         break;
       }
 
@@ -1241,7 +1250,7 @@ void Session::ChangeSchemas(int count, int delta) {
 void Session::CommitChangeSchemas(PostponedChange* change) {
   // TODO(kasperl): Rework this so we can allow allocation failures
   // as part of allocating the new classes.
-  Space* space = program()->heap()->space();
+  SemiSpace* space = program()->heap()->space();
   NoAllocationFailureScope scope(space);
 
   int length = change->size();
@@ -1452,9 +1461,8 @@ class TransformInstancesPointerVisitor : public PointerVisitor {
       Object* object = *p;
       if (!object->IsHeapObject()) continue;
       HeapObject* heap_object = HeapObject::cast(object);
-      HeapObject* forward = heap_object->forwarding_address();
-      if (forward != NULL) {
-        *p = forward;
+      if (heap_object->HasForwardingAddress()) {
+        *p = heap_object->forwarding_address();
       } else if (heap_object->IsInstance()) {
         Instance* instance = Instance::cast(heap_object);
         if (instance->get_class()->IsTransformed()) {
@@ -1492,6 +1500,7 @@ class RebuildVisitor : public ProcessVisitor {
   virtual void VisitProcess(Process* process) {
     process->heap()->space()->RebuildAfterTransformations();
     shared_heap_->heap()->space()->RebuildAfterTransformations();
+    process->heap()->old_space()->RebuildAfterTransformations();
   }
 
  private:
@@ -1504,15 +1513,10 @@ class TransformInstancesProcessVisitor : public ProcessVisitor {
       : shared_heap_(shared_heap) {}
 
   virtual void VisitProcess(Process* process) {
-    // NOTE: We need to take all spaces which are getting merged into the
-    // process heap, because otherwise we'll not update the pointers it has to
-    // the program space / to the process heap objects which were transformed.
-    process->TakeChildHeaps();
-
     Heap* heap = process->heap();
 
-    Space* space = heap->space();
-    Space* immutable_space = shared_heap_->heap()->space();
+    SemiSpace* space = heap->space();
+    SemiSpace* immutable_space = shared_heap_->heap()->space();
 
     NoAllocationFailureScope scope(space);
     NoAllocationFailureScope scope2(immutable_space);
@@ -1542,7 +1546,7 @@ void Session::TransformInstances() {
   // the [TransformInstancesProcessVisitor] to use the already installed
   // forwarding pointers in program space.
 
-  Space* space = program()->heap()->space();
+  SemiSpace* space = program()->heap()->space();
   NoAllocationFailureScope scope(space);
   TransformInstancesPointerVisitor pointer_visitor(program()->heap(),
                                                    program()->shared_heap());
@@ -1558,19 +1562,18 @@ void Session::TransformInstances() {
   program()->VisitProcesses(&rebuilding_visitor);
 }
 
-void Session::PushFrameOnSessionStack(bool is_first_name, const Frame* frame) {
+void Session::PushFrameOnSessionStack(const Frame* frame) {
   Function* function = frame->FunctionFromByteCodePointer();
   uint8* start_bcp = function->bytecode_address_for(0);
 
   uint8* bcp = frame->ByteCodePointer();
   int bytecode_offset = bcp - start_bcp;
-  // The first byte-code offset is not a return address but the offset for
-  // the current bytecode. Make it look like a return address by adding
+  // The byte-code offset is not a return address but the offset for
+  // the invoke bytecode. Make it look like a return address by adding
   // the current bytecode size to the byte-code offset.
-  if (is_first_name) {
-    Opcode current = static_cast<Opcode>(*bcp);
-    bytecode_offset += Bytecode::Size(current);
-  }
+  Opcode current = static_cast<Opcode>(*bcp);
+  bytecode_offset += Bytecode::Size(current);
+
   PushNewInteger(bytecode_offset);
   PushFunction(function);
 }
@@ -1579,7 +1582,8 @@ int Session::PushStackFrames(Stack* stack) {
   int frames = 0;
   Frame frame(stack);
   while (frame.MovePrevious()) {
-    PushFrameOnSessionStack(frames == 0, &frame);
+    if (frame.ByteCodePointer() == NULL) continue;
+    PushFrameOnSessionStack(&frame);
     ++frames;
   }
   return frames;
@@ -1589,7 +1593,7 @@ void Session::PushTopStackFrame(Stack* stack) {
   Frame frame(stack);
   bool has_top_frame = frame.MovePrevious();
   ASSERT(has_top_frame);
-  PushFrameOnSessionStack(true, &frame);
+  PushFrameOnSessionStack(&frame);
 }
 
 void Session::RestartFrame(int frame_index) {
@@ -1599,23 +1603,11 @@ void Session::RestartFrame(int frame_index) {
   Frame frame(stack);
   for (int i = 0; i <= frame_index; i++) frame.MovePrevious();
 
+  // Reset the return address to the entry function.
   frame.SetReturnAddress(reinterpret_cast<void*>(InterpreterEntry));
-  // We are now in the frame we want to reply. Navigate to the previous frame
-  // (the caller frame), so we can reply the invocation.
-  frame.MovePrevious();
-
-  // To be able to reply the activation, we set the return address of the
-  // caller frame, to the bytecode before the return address.
-  uint8* return_address = frame.ByteCodePointer();
-  uint8* previous = return_address - Bytecode::Size(Opcode::kInvokeStatic);
-
-  ASSERT(previous == Bytecode::PreviousBytecode(return_address));
-  ASSERT(Bytecode::IsInvokeVariant(static_cast<Opcode>(*previous)));
-
-  frame.SetByteCodePointer(previous);
 
   // Finally resize the stack to the next frame pointer.
-  stack->SetTopFromPointer(frame.NextFramePointer());
+  stack->SetTopFromPointer(frame.FramePointer());
 }
 
 }  // namespace fletch

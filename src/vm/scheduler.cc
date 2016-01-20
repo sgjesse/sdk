@@ -33,45 +33,37 @@ Process* const kPreemptMarker = reinterpret_cast<Process*>(1);
 
 // Global instance of scheduler.
 Scheduler* Scheduler::scheduler_ = NULL;
-ThreadIdentifier Scheduler::scheduler_thread_;
 
-static void *RunSchedulerEntry(void *data) {
-  Scheduler* scheduler = reinterpret_cast<Scheduler*>(data);
-  scheduler->Run();
-  return NULL;
-}
 
 void Scheduler::Setup() {
   ASSERT(scheduler_ == NULL);
-  Scheduler::scheduler_ = new Scheduler();
-  Scheduler::scheduler_thread_ = Thread::Run(RunSchedulerEntry, scheduler_);
-  scheduler_->WaitUntilReady();
+  scheduler_ = new Scheduler();
+  scheduler_->gc_thread_->StartThread();
+  scheduler_->thread_pool_.Start();
 }
 
 void Scheduler::TearDown() {
-  scheduler_->WaitUntilFinished();
-  scheduler_thread_.Join();
+  ASSERT(scheduler_ != NULL);
+  scheduler_->shutdown_ = true;
+  scheduler_->NotifyAllThreads();
+  scheduler_->thread_pool_.JoinAll();
+  scheduler_->gc_thread_->StopThread();
   delete scheduler_;
   scheduler_ = NULL;
 }
 
 Scheduler::Scheduler()
-#if !defined(FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS)
     : max_threads_(1),
-#else
-    : max_threads_(Platform::GetNumberOfHardwareThreads()),
-#endif
       thread_pool_(max_threads_),
-      preempt_monitor_(Platform::CreateMonitor()),
       sleeping_threads_(0),
       thread_count_(0),
       idle_threads_(kEmptyThreadState),
       threads_(new Atomic<ThreadState*>[max_threads_]),
       thread_states_to_delete_(NULL),
       startup_queue_(new ProcessQueue()),
-      state_(Scheduler::kAllocated),
       pause_monitor_(Platform::CreateMonitor()),
       pause_(false),
+      shutdown_(false),
       current_processes_(new Atomic<Process*>[max_threads_]),
       gc_thread_(new GCThread()) {
   for (int i = 0; i < max_threads_; i++) {
@@ -81,7 +73,6 @@ Scheduler::Scheduler()
 }
 
 Scheduler::~Scheduler() {
-  delete preempt_monitor_;
   delete pause_monitor_;
   delete[] current_processes_;
   delete[] threads_;
@@ -93,29 +84,6 @@ Scheduler::~Scheduler() {
     ThreadState* next = current->next_idle_thread();
     delete current;
     current = next;
-  }
-}
-
-void Scheduler::WaitUntilReady() {
-  ScopedMonitorLock scoped_lock(preempt_monitor_);
-
-  // Wait until the scheduler thread signals it's ready.
-  while (state_ != Scheduler::kInitialized) {
-    preempt_monitor_->Wait();
-  }
-}
-
-void Scheduler::WaitUntilFinished() {
-  ScopedMonitorLock scoped_lock(preempt_monitor_);
-  ASSERT(state_ == Scheduler::kInitialized);
-
-  // Signal the scheduler thread to shut down
-  state_ = Scheduler::kFinishing;
-  preempt_monitor_->NotifyAll();
-
-  // Wait until it did shut down.
-  while (state_ != Scheduler::kFinished) {
-    preempt_monitor_->Wait();
   }
 }
 
@@ -235,6 +203,22 @@ void Scheduler::ResumeGcThread() {
   gc_thread_->Resume();
 }
 
+void Scheduler::PreemptionTick() {
+  // We have at most one scheduler thread.
+  if (thread_count_ > 0) {
+    ASSERT(thread_count_ <= 1);
+    PreemptThreadProcess(0);
+  }
+}
+
+void Scheduler::ProfileTick() {
+  // We have at most one scheduler thread.
+  if (thread_count_ > 0) {
+    ASSERT(thread_count_ <= 1);
+    scheduler_->ProfileThreadProcess(0);
+  }
+}
+
 void Scheduler::FinishedGC(Program* program, int count) {
   ASSERT(count > 0);
   ProgramState* state = program->program_state();
@@ -314,58 +298,6 @@ bool Scheduler::EnqueueProcess(Process* process, Port* port) {
   return true;
 }
 
-void Scheduler::Run() {
-  ScopedMonitorLock locker(preempt_monitor_);
-
-  thread_pool_.Start();
-  gc_thread_->StartThread();
-
-  static const bool kProfile = Flags::profile;
-  static const uint64 kProfileIntervalUs = Flags::profile_interval;
-
-  int thread_index = 0;
-  uint64 next_preempt = GetNextPreemptTime();
-  // If profile is disabled, next_preempt will always be less than next_profile.
-  uint64 next_profile =
-      kProfile ? Platform::GetMicroseconds() + kProfileIntervalUs : UINT64_MAX;
-  uint64 next_timeout = Utils::Minimum(next_preempt, next_profile);
-
-  // As long as we're not told to finish, we stay alive.
-  state_ = Scheduler::kInitialized;
-  preempt_monitor_->NotifyAll();
-  while (state_ != Scheduler::kFinishing) {
-    // If we didn't time out, we were interrupted. In that case, continue.
-    if (!preempt_monitor_->WaitUntil(next_timeout)) continue;
-
-    bool is_preempt = next_preempt <= next_profile;
-    bool is_profile = next_profile <= next_preempt;
-
-    if (is_preempt) {
-      // Clamp the thread_index to the number of current threads.
-      if (thread_index >= thread_count_) thread_index = 0;
-      PreemptThreadProcess(thread_index);
-      thread_index++;
-      next_preempt = GetNextPreemptTime();
-      next_timeout = Utils::Minimum(next_preempt, next_profile);
-    }
-
-    if (is_profile) {
-      // Send a profile signal to all running processes.
-      int thread_count = thread_count_;
-      for (int i = 0; i < thread_count; i++) ProfileThreadProcess(i);
-      next_profile += kProfileIntervalUs;
-      next_timeout = Utils::Minimum(next_preempt, next_profile);
-    }
-  }
-  NotifyAllThreads();
-
-  thread_pool_.JoinAll();
-  gc_thread_->StopThread();
-
-  state_ = Scheduler::kFinished;
-  preempt_monitor_->NotifyAll();
-}
-
 void Scheduler::DeleteTerminatedProcess(Process* process, Signal::Kind kind) {
   Program* program = process->program();
   ProgramState* state = program->program_state();
@@ -375,7 +307,7 @@ void Scheduler::DeleteTerminatedProcess(Process* process, Signal::Kind kind) {
   if (Flags::gc_on_delete) {
     ASSERT(gc_thread_ != NULL);
 
-    program->program_state()->Retain();
+    state->Retain();
     gc_thread_->TriggerGC(program);
   }
 
@@ -432,6 +364,8 @@ void Scheduler::ExitAtUncaughtException(Process* process, bool print_stack) {
         Frame frame(stack);
         while (frame.MovePrevious()) {
           Function* function = frame.FunctionFromByteCodePointer();
+          if (function == NULL) continue;
+
           Print::Out("Frame % 2d: Function(%ld)\n", index,
                      program->OffsetOf(function));
           index++;
@@ -514,13 +448,6 @@ void Scheduler::ProfileThreadProcess(int thread_id) {
       current_processes_[thread_id] = process;
     }
   }
-}
-
-uint64 Scheduler::GetNextPreemptTime() {
-  // Wait between 1 and 100 ms.
-  int current_threads = Utils::Maximum<int>(1, thread_count_);
-  uint64 now = Platform::GetMicroseconds();
-  return now + Utils::Maximum(1, 100 / current_threads) * 1000L;
 }
 
 void Scheduler::EnqueueProcessAndNotifyThreads(ThreadState* thread_state,
@@ -622,86 +549,18 @@ void Scheduler::RunInThread() {
     ScopedMonitorLock scoped_lock(thread_state->idle_monitor());
     while (thread_state->queue()->is_empty() && startup_queue_->is_empty() &&
            !pause_ &&
-           state_ == Scheduler::kInitialized) {
+           !shutdown_) {
       PushIdleThread(thread_state);
       // The thread is becoming idle.
       thread_state->idle_monitor()->Wait();
       // At this point the thread_state may still be in idle_threads_. That's
       // okay, as it will just be ignored later on.
     }
-    if (state_ != Scheduler::kInitialized) break;
+    if (shutdown_) break;
   }
   ThreadExit(thread_state);
 }
 
-#ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-
-void Scheduler::RunInterpreterLoop(ThreadState* thread_state) {
-  // We use this heap for allocating new immutable objects.
-  Program* program = NULL;
-  SharedHeap* shared_heap = NULL;
-  SharedHeap::Part* shared_heap_part = NULL;
-
-  while (!pause_) {
-    Process* process = NULL;
-    DequeueFromThread(thread_state, &process);
-    // No more processes for this state, break.
-    if (process == NULL) break;
-
-    while (process != NULL) {
-      // If we changed programs, merge the current part back to it's heap
-      // and get a new part from the new program.
-      if (process->program() != program) {
-        if (shared_heap_part != NULL) {
-          if (shared_heap->ReleasePart(shared_heap_part)) {
-            program->program_state()->Retain();
-            gc_thread_->TriggerSharedGC(program);
-          }
-        }
-        if (program != NULL) {
-          if (program->program_state()->Release()) {
-            program->NotifyExitListener();
-          }
-        }
-        program = process->program();
-        program->program_state()->Retain();
-        shared_heap = program->shared_heap();
-        shared_heap_part = shared_heap->AcquirePart();
-      }
-
-      // Interpret and trigger GC if interpretation resulted in immutable
-      // allocation failure.
-      bool allocation_failure = false;
-      Process* new_process = InterpretProcess(
-          process, shared_heap_part->heap(), thread_state, &allocation_failure);
-      if (allocation_failure) {
-        if (shared_heap->ReleasePart(shared_heap_part)) {
-          program->program_state()->Retain();
-          gc_thread_->TriggerSharedGC(program);
-        }
-        shared_heap_part = shared_heap->AcquirePart();
-      }
-
-      // Possibly switch to a new process.
-      process = new_process;
-    }
-  }
-
-  // Always merge remaining immutable heap part back before (possibly) going
-  // to sleep.
-  if (shared_heap != NULL) {
-    ProgramState* state = program->program_state();
-    if (shared_heap->ReleasePart(shared_heap_part)) {
-      state->Retain();
-      gc_thread_->TriggerSharedGC(program);
-    }
-
-    if (state->Release()) program->NotifyExitListener();
-  }
-}
-
-#else  // FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-
 void Scheduler::RunInterpreterLoop(ThreadState* thread_state) {
   // We use this heap for allocating new immutable objects.
   while (!pause_) {
@@ -711,24 +570,16 @@ void Scheduler::RunInterpreterLoop(ThreadState* thread_state) {
     if (process == NULL) break;
 
     while (process != NULL) {
-      bool allocation_failure = false;
       Heap* shared_heap = process->program()->shared_heap()->heap();
 
-      Process* new_process = InterpretProcess(
-          process, shared_heap, thread_state, &allocation_failure);
-
-      if (allocation_failure) {
-        // Can never run into an immutable allocation failure.
-        UNREACHABLE();
-      }
+      Process* new_process =
+          InterpretProcess(process, shared_heap, thread_state);
 
       // Possibly switch to a new process.
       process = new_process;
     }
   }
 }
-
-#endif  // FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
 
 void Scheduler::SetCurrentProcessForThread(int thread_id, Process* process) {
   if (thread_id == -1) return;
@@ -759,8 +610,7 @@ void Scheduler::ClearCurrentProcessForThread(int thread_id, Process* process) {
 }
 
 Process* Scheduler::InterpretProcess(Process* process, Heap* shared_heap,
-                                     ThreadState* thread_state,
-                                     bool* allocation_failure) {
+                                     ThreadState* thread_state) {
   ASSERT(process->exception()->IsNull());
 
   Signal* signal = process->signal();
@@ -790,22 +640,12 @@ Process* Scheduler::InterpretProcess(Process* process, Heap* shared_heap,
   // will potentially push the process on a queue which is accessed by other
   // threads, which would create a race.
   shared_heap->set_random(process->random());
-  process->set_immutable_heap(shared_heap);
   interpreter.Run();
-  process->set_immutable_heap(NULL);
   shared_heap->set_random(NULL);
 
   process->set_thread_state(NULL);
   Thread::SetProcess(NULL);
   ClearCurrentProcessForThread(thread_id, process);
-
-  if (interpreter.IsImmutableAllocationFailure()) {
-#if !defined(FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS)
-    UNREACHABLE();
-#endif
-    *allocation_failure = true;
-    return process;
-  }
 
   if (interpreter.IsYielded()) {
     process->ChangeState(Process::kRunning, Process::kYielding);

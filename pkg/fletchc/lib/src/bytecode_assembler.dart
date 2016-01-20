@@ -61,6 +61,11 @@ class BytecodeAssembler {
 
   BytecodeAssembler(this.functionArity);
 
+  int computeParameterSlot(int parameter) {
+    assert(parameter >= 0 && parameter < functionArity);
+    return parameter - frameDescriptorSize - functionArity;
+  }
+
   void reuse() {
     bytecodes.clear();
     catchRanges.clear();
@@ -173,6 +178,16 @@ class BytecodeAssembler {
     loadBoxedHelper(computeParameterOffset(parameter));
   }
 
+  void loadParameterSlot(int parameterSlot) {
+    int offset = stackSize - parameterSlot - 1;
+    loadLocalHelper(offset);
+  }
+
+  void loadBoxedParameterSlot(int parameterSlot) {
+    int offset = stackSize - parameterSlot - 1;
+    loadBoxedHelper(offset);
+  }
+
   void loadStatic(int index) {
     internalAdd(new LoadStatic(index));
   }
@@ -254,6 +269,16 @@ class BytecodeAssembler {
   void storeBoxedParameter(int parameter) {
     assert(parameter >= 0 && parameter < functionArity);
     storeBoxedHelper(computeParameterOffset(parameter));
+  }
+
+  void storeParameterSlot(int parameterSlot) {
+    int offset = stackSize - parameterSlot - 1;
+    storeLocalHelper(offset);
+  }
+
+  void storeBoxedParameterSlot(int parameterSlot) {
+    int offset = stackSize - parameterSlot - 1;
+    storeBoxedHelper(offset);
   }
 
   void storeStatic(int index) {
@@ -358,8 +383,8 @@ class BytecodeAssembler {
     internalAddStackPointerDifference(new InvokeTestUnfold(selector), -arity);
   }
 
-  void invokeSelector() {
-    internalAddStackPointerDifference(const InvokeSelector(0), 0);
+  void invokeSelector(int slot) {
+    internalAddStackPointerDifference(new InvokeSelector(slot), 0);
   }
 
   void pop() {
@@ -404,14 +429,12 @@ class BytecodeAssembler {
   void ret() {
     hasBindAfterTerminator = false;
     if (stackSize <= 0) throw "Bad stackSize for return bytecode: $stackSize";
-    assert(functionArity <= 255);
-    internalAdd(new Return(functionArity));
+    internalAdd(const Return());
   }
 
   void returnNull() {
     hasBindAfterTerminator = false;
-    assert(functionArity <= 255);
-    internalAdd(new ReturnNull(functionArity));
+    internalAdd(const ReturnNull());
   }
 
   void identical() {

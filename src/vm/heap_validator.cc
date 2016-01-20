@@ -25,7 +25,8 @@ void HeapPointerValidator::ValidatePointer(Object* object) {
   }
   bool is_mutable_heap_obj = false;
   if (mutable_heap_ != NULL) {
-    is_mutable_heap_obj = mutable_heap_->space()->Includes(address);
+    is_mutable_heap_obj = (mutable_heap_->space()->Includes(address) ||
+                           mutable_heap_->old_space()->Includes(address));
   }
 
   bool is_program_heap = program_heap_->space()->Includes(address);
@@ -34,7 +35,7 @@ void HeapPointerValidator::ValidatePointer(Object* object) {
       !StaticClassStructures::IsStaticClass(heap_object)) {
     fprintf(stderr,
             "Found pointer %p which lies in neither of "
-            "immutable_heap/mutable_heap/program_heap.\n",
+            "mutable_heap/program_heap.\n",
             heap_object);
 
     FATAL("Heap validation failed.");
@@ -57,11 +58,10 @@ void ProcessHeapValidatorVisitor::VisitProcess(Process* process) {
   {
     HeapPointerValidator validator(program_heap_, shared_heap_, process_heap);
 
-    SafeObjectPointerVisitor pointer_visitor(process, &validator);
+    HeapObjectPointerVisitor pointer_visitor(&validator);
     process->IterateRoots(&validator);
     process_heap->IterateObjects(&pointer_visitor);
     process_heap->VisitWeakObjectPointers(&validator);
-    process->store_buffer()->IterateObjects(&pointer_visitor);
     process->mailbox()->IteratePointers(&validator);
   }
 }

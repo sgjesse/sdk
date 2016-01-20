@@ -98,11 +98,6 @@
           '-Wno-write-strings',
           '-Wno-sign-compare',
           '-Wno-missing-field-initializers',
-          '-Wno-empty-body',
-          '-Wno-address',
-        ],
-        'common_cflags_c': [
-          '-Wno-pointer-sign',
         ],
         'common_cflags_cc': [
           '-Wno-literal-suffix',
@@ -112,10 +107,6 @@
       'includes': [
         '../free_rtos_sources.gypi',
         '../hal_sources.gypi',
-        '../lwip_sources.gypi',
-      ],
-      'defines': [
-        'LWIP_TIMEVAL_PRIVATE=0',
       ],
       'include_dirs': [
         '<(generated_path)/Inc',
@@ -123,24 +114,22 @@
       ],
       'sources': [
         # Application.
+        '<(source_path)/cmpctmalloc.c',
+        '<(source_path)/cmpctmalloc.h',
         '<(source_path)/freertos.cc',
         '<(app_source_path)/fletch_entry.cc',
         '<(source_path)/logger.cc',
         '<(source_path)/main.cc',
+        '<(source_path)/page_allocator.cc',
+        '<(source_path)/page_allocator.h',
 
         '<(source_path)/syscalls.c',
 
         # Generated files.
-        '<(generated_path)/Inc/ethernetif.h',
-        '<(generated_path)/Inc/FreeRTOSConfig.h',
-        '<(generated_path)/Inc/lwip.h',
-        '<(generated_path)/Inc/lwipopts.h',
         '<(generated_path)/Inc/mxconstants.h',
         '<(generated_path)/Inc/stm32f7xx_hal_conf.h',
         '<(generated_path)/Inc/stm32f7xx_it.h',
-        '<(generated_path)/Src/ethernetif.c',
         '<(generated_path)/Src/mx_init.c',  # Derived from generated main.c.
-        '<(generated_path)/Src/lwip.c',
         '<(generated_path)/Src/stm32f7xx_hal_msp.c',
         '<(generated_path)/Src/stm32f7xx_it.c',
 
@@ -161,7 +150,6 @@
           'xcode_settings': {
             'OTHER_CFLAGS': [
               '<@(common_cflags)',
-              '<@(common_cflags_c)',
             ],
             'OTHER_CPLUSPLUSFLAGS' : [
               '<@(common_cflags)',
@@ -172,9 +160,6 @@
         ['OS=="linux"', {
           'cflags': [
             '<@(common_cflags)',
-          ],
-          'cflags_c': [
-            '<@(common_cflags_c)',
           ],
           'cflags_cc': [
             '<@(common_cflags_cc)',
@@ -196,7 +181,13 @@
           #'-T<(generated_path)/SW4STM32/configuration/STM32F746NGHx_FLASH.ld',
           # TODO(340): Why is this needed???
           '-T../../platforms/stm/disco_fletch/generated/SW4STM32/'
-            'configuration/STM32F746NGHx_FLASH.ld'
+            'configuration/STM32F746NGHx_FLASH.ld',
+          '-Wl,--wrap=__libc_init_array',
+          '-Wl,--wrap=_malloc_r',
+          '-Wl,--wrap=_malloc_r',
+          '-Wl,--wrap=_realloc_r',
+          '-Wl,--wrap=_calloc_r',
+          '-Wl,--wrap=_free_r',
         ],
       },
       'type': 'executable',

@@ -29,6 +29,8 @@
 
     'LK_PATH%': 'third_party/lk/lk-downstream',
 
+    'LK_USE_DEPS_ARM_GCC%': '1',
+
     'mbed_path': '<(DEPTH)/third_party/mbed/build/',
 
     'posix%': 1,
@@ -67,7 +69,6 @@
         'defines': [
           'FLETCH_ENABLE_LIVE_CODING',
           'FLETCH_ENABLE_FFI',
-          'FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS',
           'FLETCH_ENABLE_NATIVE_PROCESSES',
           'FLETCH_ENABLE_PRINT_INTERCEPTORS',
         ],
@@ -171,27 +172,6 @@
         ],
 
         'xcode_settings': { # And ninja.
-          'GCC_OPTIMIZATION_LEVEL': '1',
-
-          'OTHER_CPLUSPLUSFLAGS': [
-            '-g',
-          ],
-        },
-
-        'cflags': [
-          '-g',
-          '-O1',
-        ],
-      },
-
-      'fletch_develop': {
-        'abstract': 1,
-
-        'defines': [
-          'DEBUG',
-        ],
-
-        'xcode_settings': { # And ninja.
           'GCC_OPTIMIZATION_LEVEL': '0',
 
           'OTHER_CPLUSPLUSFLAGS': [
@@ -228,11 +208,12 @@
           'ARCHS': [ 'i386' ],
         },
 
-        'yasm_flags': [
-          '-fwin32',
-          '-m', 'x86',
-          '-p', 'gas',
-        ],
+        'variables': {
+          'yasm_arch_flags': [
+            '-f', 'win32',
+            '-m', 'x86',
+          ],
+        },
       },
 
       'fletch_x64': {
@@ -257,11 +238,12 @@
           ],
         },
 
-        'yasm_flags': [
-          '-fwin64',
-          '-m', 'amd64',
-          '-p', 'gas',
-        ],
+        'variables': {
+          'yasm_arch_flags': [
+            '-f', 'win64',
+            '-m', 'amd64',
+          ],
+        },
       },
 
       'fletch_arm': {
@@ -401,10 +383,27 @@
         'target_conditions': [
           ['_toolset=="target"', {
             'defines': [
-              'GCC_XARM_LOCAL', # Fake define intercepted by cc_wrapper.py.
               'FLETCH_TARGET_OS_LK',
              ],
-
+            'conditions': [
+              ['LK_USE_DEPS_ARM_GCC==1', {
+                'defines': [
+                  'GCC_XARM_EMBEDDED', # Fake define for cc_wrapper.py.
+                ],
+                'ldflags': [
+                  # Fake define intercepted by cc_wrapper.py.
+                  '-L/GCC_XARM_EMBEDDED',
+                ],
+              }, { # 'LK_USE_DEPS_ARM_GCC!=1'
+                'defines': [
+                  'GCC_XARM_LOCAL', # Fake define for cc_wrapper.py.
+                ],
+                'ldflags': [
+                  # Fake define intercepted by cc_wrapper.py.
+                  '-L/GCC_XARM_LOCAL',
+                ],
+              }],
+            ],
             'cflags': [
               '-mfloat-abi=softfp',
               '-mfpu=fpv4-sp-d16',
@@ -430,11 +429,6 @@
               '<(DEPTH)/<(LK_PATH)/lib/minip/include/',
               '<(DEPTH)/<(LK_PATH)/arch/arm/arm/include',
               '<(DEPTH)/<(LK_PATH)/lib/heap/include/',
-            ],
-
-            'ldflags': [
-              # Fake define intercepted by cc_wrapper.py.
-              '-L/GCC_XARM_LOCAL',
             ],
 
             'defines!': [
@@ -612,18 +606,6 @@
 
         'defines!': [
           'FLETCH_ENABLE_FFI',
-        ],
-      },
-
-      'fletch_disable_multiple_process_heaps': {
-        'abstract': 1,
-
-        'defines!': [
-          'FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS',
-        ],
-
-        'defines': [
-          'FLETCH_MARK_SWEEP',
         ],
       },
 

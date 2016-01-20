@@ -51,9 +51,8 @@ class FletchSystemBuilder {
   final List<FletchFunctionBuilder> _newFunctions = <FletchFunctionBuilder>[];
   final Map<int, FletchClassBuilder> _newClasses = <int, FletchClassBuilder>{};
   final Map<ConstantValue, int> _newConstants = <ConstantValue, int>{};
-  final Map<FletchFunctionBase, Map<CallStructure, FletchFunctionBuilder>>
-      _newParameterStubs =
-          <FletchFunctionBase, Map<CallStructure, FletchFunctionBuilder>>{};
+  final Map<ParameterStubSignature, FletchFunctionBuilder> _newParameterStubs =
+      <ParameterStubSignature, FletchFunctionBuilder>{};
 
   final Map<int, int> _newGettersByFieldIndex = <int, int>{};
   final Map<int, int> _newSettersByFieldIndex = <int, int>{};
@@ -86,8 +85,11 @@ class FletchSystemBuilder {
         this.functionIdStart = predecessorSystem.computeMaxFunctionId() + 1,
         this.classIdStart = predecessorSystem.computeMaxClassId() + 1;
 
-  // TODO(ajohnsen): Remove and add a lookupConstant.
-  Map<ConstantValue, int> getCompiledConstants() => _newConstants;
+  int lookupConstantIdByValue(ConstantValue value) {
+    FletchConstant constant = predecessorSystem.lookupConstantByValue(value);
+    if (constant != null) return constant.id;
+    return _newConstants[value];
+  }
 
   void replaceUsage(Element element, FunctionElement usage) {
     _replaceUsage.putIfAbsent(element, () => []).add(usage);
@@ -265,6 +267,28 @@ class FletchSystemBuilder {
 
   List<FletchFunctionBuilder> getNewFunctions() => _newFunctions;
 
+  FletchClassBuilder getTearoffClassBuilder(
+      FletchFunctionBase function,
+      FletchClassBuilder superclass) {
+    int functionId = lookupTearOffById(function.functionId);
+    if (functionId == null) return null;
+    FletchFunctionBase functionBuilder = lookupFunction(functionId);
+    FletchClassBuilder classBuilder =
+        lookupClassBuilder(functionBuilder.memberOf);
+    if (classBuilder != null) return classBuilder;
+    FletchClass cls = lookupClass(functionBuilder.memberOf);
+    return newClassBuilderInternal(cls, superclass);
+  }
+
+  FletchClassBuilder newClassBuilderInternal(
+      FletchClass klass,
+      FletchClassBuilder superclass) {
+    FletchClassBuilder builder = new FletchPatchClassBuilder(
+        klass, superclass);
+    _newClasses[klass.classId] = builder;
+    return builder;
+  }
+
   FletchClassBuilder newClassBuilder(
       ClassElement element,
       FletchClassBuilder superclass,
@@ -273,9 +297,7 @@ class FletchSystemBuilder {
     if (element != null) {
       FletchClass klass = predecessorSystem.lookupClassByElement(element);
       if (klass != null) {
-        FletchClassBuilder builder = new FletchPatchClassBuilder(
-            klass, superclass);
-        _newClasses[klass.classId] = builder;
+        FletchClassBuilder builder = newClassBuilderInternal(klass, superclass);
         _classBuildersByElement[element] = builder;
         return builder;
       }
@@ -308,7 +330,7 @@ class FletchSystemBuilder {
   Iterable<FletchClassBuilder> getNewClasses() => _newClasses.values;
 
   void registerConstant(ConstantValue constant, FletchContext context) {
-    // TODO(ajohnsen): Look in predecessorSystem.
+    if (predecessorSystem.lookupConstantByValue(constant) != null) return;
     _newConstants.putIfAbsent(constant, () {
       if (constant.isConstructedObject) {
         context.registerConstructedConstantValue(constant);
@@ -318,7 +340,9 @@ class FletchSystemBuilder {
       for (ConstantValue value in constant.getDependencies()) {
         registerConstant(value, context);
       }
-      return predecessorSystem.constants.length + _newConstants.length;
+      // TODO(zarah): Compute max constant id (as for functions an classes)
+      // instead of using constantsById.length
+      return predecessorSystem.constantsById.length + _newConstants.length;
     });
   }
 
@@ -326,24 +350,17 @@ class FletchSystemBuilder {
     _symbolByFletchSelectorId[fletchSelectorId] = symbol;
   }
 
-  FletchFunctionBase parameterStubFor(
-      FletchFunctionBase function,
-      CallStructure callStructure) {
-    // TODO(ajohnsen): Look in predecessorSystem.
-    var stubs = _newParameterStubs[function];
-    if (stubs == null) return null;
-    return stubs[callStructure];
+  FletchFunctionBase lookupParameterStub(ParameterStubSignature signature) {
+    FletchFunctionBuilder stub = _newParameterStubs[signature];
+    if (stub != null) return stub;
+    return predecessorSystem.lookupParameterStub(signature);
   }
 
-  void registerParameterStubFor(
-      FletchFunctionBase function,
-      CallStructure callStructure,
+  void registerParameterStub(
+      ParameterStubSignature signature,
       FletchFunctionBuilder stub) {
-    var stubs = _newParameterStubs.putIfAbsent(
-        function,
-        () => <CallStructure, FletchFunctionBuilder>{});
-    assert(!stubs.containsKey(callStructure));
-    stubs[callStructure] = stub;
+    assert(lookupParameterStub(signature) == null);
+    _newParameterStubs[signature] = stub;
   }
 
   FletchSystem computeSystem(FletchContext context, List<VmCommand> commands) {
@@ -394,11 +411,14 @@ class FletchSystemBuilder {
     }
 
     // Create all FletchConstants.
-    List<FletchConstant> constants = <FletchConstant>[];
+    PersistentMap<int, FletchConstant> constantsById =
+        predecessorSystem.constantsById;
+    PersistentMap<ConstantValue, FletchConstant> constantsByValue =
+        predecessorSystem.constantsByValue;
     _newConstants.forEach((constant, int id) {
       void addList(List<ConstantValue> list, bool isByteList) {
         for (ConstantValue entry in list) {
-          int entryId = context.compiledConstants[entry];
+          int entryId = lookupConstantIdByValue(entry);
           commands.add(new PushFromMap(MapId.constants, entryId));
           if (entry.isInt) {
             IntConstantValue constant = entry;
@@ -492,7 +512,7 @@ class FletchSystemBuilder {
           if (!member.isField || member.isStatic || member.isPatch) return;
           FieldElement fieldElement = member;
           ConstantValue fieldValue = value.fields[fieldElement];
-          int fieldId = context.compiledConstants[fieldValue];
+          int fieldId = lookupConstantIdByValue(fieldValue);
           commands.add(new PushFromMap(MapId.constants, fieldId));
         }
 
@@ -527,7 +547,9 @@ class FletchSystemBuilder {
       } else {
         throw "Unsupported constant: ${constant.toStructuredString()}";
       }
-      constants.add(new FletchConstant(id, MapId.constants));
+      FletchConstant fletchConstant = new FletchConstant(id, MapId.constants);
+      constantsByValue = constantsByValue.insert(constant, fletchConstant);
+      constantsById = constantsById.insert(id, fletchConstant);
       commands.add(new PopToMap(MapId.constants, id));
     });
 
@@ -684,6 +706,13 @@ class FletchSystemBuilder {
       settersByFieldIndex = settersByFieldIndex.insert(fieldIndex, functionId);
     });
 
+    PersistentMap<ParameterStubSignature, FletchFunction> parameterStubs =
+        predecessorSystem.parameterStubs;
+    _newParameterStubs.forEach((signature, functionBuilder) {
+      FletchFunction function = functionsById[functionBuilder.functionId];
+      parameterStubs = parameterStubs.insert(signature, function);
+    });
+
     return new FletchSystem(
         functionsById,
         functionsByElement,
@@ -691,9 +720,11 @@ class FletchSystemBuilder {
         tearoffsById,
         classesById,
         classesByElement,
-        constants,
+        constantsById,
+        constantsByValue,
         symbolByFletchSelectorId,
         gettersByFieldIndex,
-        settersByFieldIndex);
+        settersByFieldIndex,
+        parameterStubs);
   }
 }

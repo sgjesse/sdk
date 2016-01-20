@@ -14,6 +14,8 @@
 
 namespace fletch {
 
+extern const char* kLocalLabelPrefix;
+
 enum Register {
   EAX = 0,
   ECX = 1,
@@ -186,33 +188,17 @@ class Address : public Operand {
 
 class Label {
  public:
-  Label() : position_(0) {}
+  Label() : position_(-1) {}
 
-  // Returns the position for bound and linked labels. Cannot be used
-  // for unused labels.
-  int position() const {
-    ASSERT(!IsUnused());
-    return IsBound() ? -position_ - 1 : position_ - 1;
+  // Returns the position for a label. Positions are assigned on first use.
+  int position() {
+    if (position_ == -1) position_ = position_counter_++;
+    return position_;
   }
-
-  bool IsBound() const { return position_ < 0; }
-  bool IsUnused() const { return position_ == 0; }
-  bool IsLinked() const { return position_ > 0; }
 
  private:
   int position_;
-
-  void BindTo(int position) {
-    position_ = -position - 1;
-    ASSERT(IsBound());
-  }
-
-  void LinkTo(int position) {
-    position_ = position + 1;
-    ASSERT(IsLinked());
-  }
-
-  friend class Assembler;
+  static int position_counter_;
 };
 
 #define INSTRUCTION_0(name, format) \
@@ -240,6 +226,7 @@ class Assembler {
   INSTRUCTION_1(imul, "imul %rl", Register);
 
   INSTRUCTION_1(call, "call *%rl", Register);
+  INSTRUCTION_1(call, "call *%a", const Address&);
 
   INSTRUCTION_1(jmp, "jmp *%rl", Register);
   INSTRUCTION_1(jmp, "jmp *%a", const Address&);
@@ -250,6 +237,8 @@ class Assembler {
 
   INSTRUCTION_2(movl, "movl %a, %rl", Register, const Address&);
   INSTRUCTION_2(movl, "movl %rl, %a", const Address&, Register);
+
+  INSTRUCTION_2(cmove, "cmove %rl, %rl", Register, Register);
 
   INSTRUCTION_2(leal, "leal %a, %rl", Register, const Address&);
   INSTRUCTION_2(movzbl, "movzbl %a, %rl", Register, const Address&);
@@ -268,6 +257,7 @@ class Assembler {
 
   INSTRUCTION_2(andl, "andl %i, %rl", Register, const Immediate&);
   INSTRUCTION_2(andl, "andl %rl, %rl", Register, Register);
+  INSTRUCTION_2(andl, "andl %a, %rl", Register, const Address&);
 
   INSTRUCTION_2(subl, "subl %rl, %rl", Register, Register);
   INSTRUCTION_2(subl, "subl %i, %rl", Register, const Immediate&);
@@ -304,7 +294,9 @@ class Assembler {
   void Bind(Label* label);
 
   void DefineLong(const char* name);
-  void LoadNative(Register reg, Register index);
+  void LoadNative(Register destination, Register index);
+
+  void LoadLabel(Register reg, const char*);
 
   void SwitchToText();
   void SwitchToData();
@@ -317,9 +309,6 @@ class Assembler {
   void PrintAddress(const Address* address);
 
   static const char* ConditionMnemonic(Condition condition);
-
-  static const char* ComputeDirectionForLinking(Label* label);
-  static int NewLabelPosition();
 
   // Helper functions for wrapping operand types before passing them
   // through the va_args processing of Print(format, ...). The values

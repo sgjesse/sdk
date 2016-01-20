@@ -38,7 +38,7 @@ DEBUG_LOG=".debug.log"
 GCS_COREDUMP_BUCKET = 'fletch-buildbot-coredumps'
 
 FLETCH_REGEXP = (r'fletch-'
-                 r'(?P<system>linux|mac|win|lk)'
+                 r'(?P<system>linux|mac|win|lk|free-rtos)'
                  r'(?P<partial_configuration>'
                    r'-(?P<mode>debug|release)'
                    r'(?P<asan>-asan)?'
@@ -103,6 +103,10 @@ def Main():
 
         if system == 'lk':
           StepsLK(debug_log)
+          return
+
+        if system == 'free-rtos':
+          StepsFreeRtos(debug_log)
           return
 
         modes = ['debug', 'release']
@@ -410,6 +414,29 @@ def StepsNormal(debug_log, system, modes, archs, asans, embedded_libs):
 
         RunWithCoreDumpArchiving(run, build_dir, build_conf)
 
+def StepsFreeRtos(debug_log):
+  StepGyp()
+
+  # We need the fletch daemon process to compile snapshots.
+  host_configuration = GetBuildConfigurations(
+      system=utils.GuessOS(),
+      modes=['release'],
+      archs=['x64'],
+      asans=[False],
+      embedded_libs=[False],
+      use_sdks=[False])[0]
+  StepBuild(host_configuration['build_conf'], host_configuration['build_dir'])
+
+  configuration = GetBuildConfigurations(
+      system=utils.GuessOS(),
+      modes=['debug'],
+      archs=['STM'],
+      asans=[False],
+      embedded_libs=[False],
+      use_sdks=[False])[0]
+  StepBuild(configuration['build_conf'], configuration['build_dir'])
+
+
 def StepsLK(debug_log):
   # We need the fletch daemon process to compile snapshots.
   host_configuration = GetBuildConfigurations(
@@ -650,6 +677,8 @@ class PersistentFletchDaemon(object):
     self._persistent = subprocess.Popen(
       [os.path.join(os.path.abspath(self._configuration['build_dir']), 'dart'),
        '-c',
+       # TODO(kustermann): Issue(396): Remove this --enable-dumpcore flag again.
+       '--enable-dumpcore',
        '--packages=%s' % os.path.abspath('pkg/fletchc/.packages'),
        '-Dfletch.version=%s' % version,
        'package:fletchc/src/hub/hub_main.dart',
@@ -661,11 +690,13 @@ class PersistentFletchDaemon(object):
       # down in response to a signal, the persistent process will kill its
       # process group to ensure that any processes it has spawned also exit. If
       # we don't use a new process group, that will also kill this process.
-      preexec_fn=os.setsid,
-      # We change the current directory of the persistent process to ensure
-      # that we read files relative to the C++ client's current directory, not
-      # the persistent process'.
-      cwd='/')
+      preexec_fn=os.setsid
+      # TODO(kustermann): Issue(396): Make the cwd=/ again.
+      ## We change the current directory of the persistent process to ensure
+      ## that we read files relative to the C++ client's current directory, not
+      ## the persistent process'.
+      #, cwd='/')
+      )
 
     while not self._log_file.tell():
       # We're waiting for the persistent process to write a line on stdout. It

@@ -161,10 +161,12 @@ const FletchSystem BASE_FLETCH_SYSTEM = const FletchSystem(
     const PersistentMap<int, int>(),
     const PersistentMap<int, FletchClass>(),
     const PersistentMap<ClassElement, FletchClass>(),
-    const <FletchConstant>[],
+    const PersistentMap<int, FletchConstant>(),
+    const PersistentMap<ConstantValue, FletchConstant>(),
     const PersistentMap<int, String>(),
     const PersistentMap<int, int>(),
-    const PersistentMap<int, int>());
+    const PersistentMap<int, int>(),
+    const PersistentMap<ParameterStubSignature, FletchFunction>());
 
 class FletchBackend extends Backend
     implements IncrementalFletchBackend {
@@ -522,15 +524,12 @@ class FletchBackend extends Backend
    * instance.
    */
   FletchClassBuilder createTearoffClass(FletchFunctionBase function) {
-    int functionId = systemBuilder.lookupTearOffById(function.functionId);
-    if (functionId != null) {
-      FletchFunctionBuilder functionBuilder =
-          systemBuilder.lookupFunction(functionId);
-      return systemBuilder.lookupClassBuilder(functionBuilder.memberOf);
-    }
+    FletchClassBuilder tearoffClass =
+        systemBuilder.getTearoffClassBuilder(function, compiledClosureClass);
+    if (tearoffClass != null) return tearoffClass;
     FunctionSignature signature = function.signature;
     bool hasThis = function.isInstanceMember;
-    FletchClassBuilder tearoffClass = createCallableStubClass(
+    tearoffClass = createCallableStubClass(
         hasThis ? 1 : 0,
         signature.parameterCount,
         compiledClosureClass);
@@ -770,8 +769,10 @@ class FletchBackend extends Backend
     }
     // The debug codegen should generate the same bytecodes as the original
     // codegen. If that is not the case debug information will be useless.
-    assert(Bytecode.identicalBytecodes(expectedBytecodes,
-                                       codegen.assembler.bytecodes));
+    if (!Bytecode.identicalBytecodes(expectedBytecodes,
+                                     codegen.assembler.bytecodes)) {
+      throw 'Debug info code different from running code.';
+    }
     return debugInfo;
   }
 
@@ -844,7 +845,7 @@ class FletchBackend extends Backend
             context.compiler.reportVerboseInfo(
                 element, 'Adding stub for $selector');
           }
-          createParameterStubFor(function, selector);
+          createParameterStub(function, selector);
         }
       } else if (element.isGetter || element.isSetter) {
         // No stub needed. If a getter returns a closure, the VM's
@@ -932,7 +933,7 @@ class FletchBackend extends Backend
       }
 
       if (!isExactParameterMatch(function.signature, selector.callStructure)) {
-        createParameterStubFor(function, selector);
+        createParameterStub(function, selector);
       }
     });
   }
@@ -1141,10 +1142,10 @@ class FletchBackend extends Backend
     codegen.assembler
         ..enterNoSuchMethod(skipGetter)
         // First invoke the getter.
-        ..invokeSelector()
+        ..invokeSelector(2)
         // Then invoke 'call', with the receiver being the result of the
         // previous invokeSelector.
-        ..invokeSelector()
+        ..invokeSelector(1)
         ..exitNoSuchMethod()
         ..bind(skipGetter)
         ..invokeMethod(fletchSelector, 1)
@@ -1195,14 +1196,14 @@ class FletchBackend extends Backend
     registry.registerStaticUse(new StaticUse.foreignUse(function));
   }
 
-  FletchFunctionBase createParameterStubFor(
+  FletchFunctionBase createParameterStub(
       FletchFunctionBase function,
       Selector selector) {
     CallStructure callStructure = selector.callStructure;
     assert(callStructure.signatureApplies(function.signature));
-    FletchFunctionBase stub = systemBuilder.parameterStubFor(
-        function,
-        callStructure);
+    ParameterStubSignature signature = new ParameterStubSignature(
+        function.functionId, callStructure);
+    FletchFunctionBase stub = systemBuilder.lookupParameterStub(signature);
     if (stub != null) return stub;
 
     int arity = selector.argumentCount;
@@ -1279,7 +1280,7 @@ class FletchBackend extends Backend
       });
     }
 
-    systemBuilder.registerParameterStubFor(function, callStructure, builder);
+    systemBuilder.registerParameterStub(signature, builder);
 
     return builder;
   }
@@ -1696,7 +1697,7 @@ class FletchBackend extends Backend
     return true;
   }
 
-  static FletchBackend newInstance(FletchCompilerImplementation compiler) {
+  static FletchBackend createInstance(FletchCompilerImplementation compiler) {
     return new FletchBackend(compiler);
   }
 

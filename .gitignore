@@ -44,8 +44,14 @@ packages
 /third_party/dart2js_info/
 /third_party/dartdoc_deps/dart-sdk.tar.gz
 /third_party/dartdoc_deps/dart-sdk
+/third_party/gcc-arm-embedded/linux/gcc-arm-embedded.tar.gz
+/third_party/gcc-arm-embedded/linux/gcc-arm-embedded
+/third_party/gcc-arm-embedded/mac/gcc-arm-embedded.tar.gz
+/third_party/gcc-arm-embedded/mac/gcc-arm-embedded
 /third_party/gyp/
 /third_party/isolate/
+/third_party/mbedtls/mbedtls.tar.gz
+/third_party/mbedtls/mbedtls/
 /third_party/openocd/
 /third_party/package_config/
 /third_party/path/
@@ -57,10 +63,8 @@ packages
 /third_party/raspbian/image
 /third_party/raspbian/kernel.tar.gz
 /third_party/raspbian/kernel
-/third_party/stm/STM32Cube_FW_F4_V1.9.0.tar.gz
-/third_party/stm/STM32Cube_FW_F4_V1.9.0/
-/third_party/stm/STM32Cube_FW_F7_V1.2.0.tar.gz
-/third_party/stm/STM32Cube_FW_F7_V1.2.0/
+/third_party/stm/stm32cube_fw_f7.tar.gz
+/third_party/stm/stm32cube_fw_f7/
 /third_party/yasm/source
 /tools/testing/bin/linux/dart
 /tools/testing/bin/linux/dart-arm

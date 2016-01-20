@@ -957,17 +957,9 @@ static Process* SpawnProcessInternal(Program* program, Process* process,
   Function* entry = FunctionForClosure(entrypoint, 2);
   ASSERT(entry != NULL);
 
-#if !defined(FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS)
   // Code in process spawning generally assumes there is enough space for
-  // stacks etc.
-  //
-  // In case of multiple heaps that is always guaranteed because
-  // each process gets it's own heap - which happens to be big enough.
-  //
-  // In case of a shared heap, we use a [NoAllocationFailureScope] to ensure
-  // it.
+  // stacks etc.  We use a [NoAllocationFailureScope] to ensure it.
   NoAllocationFailureScope scope(program->shared_heap()->heap()->space());
-#endif  // #ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
 
   // Spawn a new process and create a copy of the closure in the
   // new process' heap.
@@ -982,12 +974,16 @@ static Process* SpawnProcessInternal(Program* program, Process* process,
   // is not used and simply be 'NULL'.
   word top = stack->length();
   stack->set(--top, NULL);
+  stack->set(--top, NULL);
+  Object** frame_pointer = stack->Pointer(top);
+  stack->set(--top, NULL);
+  stack->set(--top, NULL);
   stack->set(--top, closure);
   stack->set(--top, argument);
   // Push empty slot, fp and bcp.
   stack->set(--top, NULL);
-  stack->set(--top, NULL);
-  Object** frame_pointer = stack->Pointer(top);
+  stack->set(--top, reinterpret_cast<Object*>(frame_pointer));
+  frame_pointer = stack->Pointer(top);
   stack->set(--top, reinterpret_cast<Object*>(bcp));
   // Finally push the entry and fp.
   stack->set(--top, reinterpret_cast<Object*>(InterpreterEntry));
@@ -1094,12 +1090,16 @@ BEGIN_NATIVE(CoroutineNewStack) {
 
   Stack* stack = Stack::cast(object);
   word top = stack->length();
+  stack->set(--top, NULL);
+  stack->set(--top, NULL);
+  Object** frame_pointer = stack->Pointer(top);
+  stack->set(--top, NULL);
   stack->set(--top, coroutine);
   stack->set(--top, entry);
   // Push empty slot, fp and bcp.
   stack->set(--top, NULL);
-  stack->set(--top, NULL);
-  Object** frame_pointer = stack->Pointer(top);
+  stack->set(--top, reinterpret_cast<Object*>(frame_pointer));
+  frame_pointer = stack->Pointer(top);
   stack->set(--top, reinterpret_cast<Object*>(bcp + 2));
   stack->set(--top, Smi::FromWord(0));  // Fake 'stack' argument.
   stack->set(--top, Smi::FromWord(0));  // Fake 'value' argument.

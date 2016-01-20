@@ -30,28 +30,30 @@ class BackTraceFrame {
 
   DebugInfo get debugInfo => debugState.getDebugInfo(function);
 
-  String list({int contextLines: 5}) {
+  String list(SessionState state, {int contextLines: 5}) {
     return debugInfo.sourceListStringFor(
-        bytecodePointer - 1, contextLines: contextLines);
+        bytecodePointer - 1, state, contextLines: contextLines);
   }
 
   String disasm() {
     StringBuffer buffer = new StringBuffer();
     var bytecodes = function.bytecodes;
     var offset = 0;
+    for (var bytecode in bytecodes) offset += bytecode.size;
+    int offsetLength = '$offset'.length;
+    offset = 0;
     for (var i = 0; i  < bytecodes.length; i++) {
       var source = debugInfo.astStringFor(offset);
       var current = bytecodes[i];
-      var byteNumberString = '$offset'.padLeft(4);
+      var byteNumberString = '$offset:'.padLeft(offsetLength);
       var invokeInfo = invokeString(current);
       var bytecodeString = '$byteNumberString $current$invokeInfo';
       var sourceString = '// $source';
       var printString = bytecodeString.padRight(30) + sourceString;
       offset += current.size;
-      var marker = (offset == bytecodePointer) ? '>' : ' ';
-      buffer.writeln("  $marker$printString");
+      var marker = (offset == bytecodePointer) ? '* ' : '  ';
+      buffer.writeln("$marker$printString");
     }
-    buffer.writeln('');
     return buffer.toString();
   }
 
@@ -139,13 +141,13 @@ class BackTrace {
     int currentFrame = frame != null ? frame : debugState.currentFrame;
     StringBuffer buffer = new StringBuffer();
     assert(framesToGo == 0);
-    var frameNumber = 0;
+    int frameNumber = 0;
+    int frameNumberLength = '$frameNumber'.length;
     for (var i = 0; i < frames.length; i++) {
       if (!frames[i].isVisible) continue;
-      if (frameNumber == 0) buffer.writeln("Stack trace:");
-      var marker = currentFrame == frameNumber ? '> ' : '  ';
+      var marker = currentFrame == frameNumber ? '* ' : '  ';
       var line = frames[i].shortString(maxNameLength);
-      String frameNumberString = '${frameNumber++}: '.padLeft(3);
+      String frameNumberString = '${frameNumber++}: '.padLeft(frameNumberLength);
       buffer.writeln('$marker$frameNumberString$line');
     }
     return buffer.toString();
@@ -178,11 +180,11 @@ class BackTrace {
     visibleFrameMapping = null;
   }
 
-  String list([int frame]) {
+  String list(SessionState state, [int frame]) {
     if (frame == null) frame = debugState.currentFrame;
     BackTraceFrame visibleStackFrame = visibleFrame(frame);
     if (visibleStackFrame == null) return null;
-    return visibleStackFrame.list();
+    return visibleStackFrame.list(state);
   }
 
   String disasm([int frame]) {

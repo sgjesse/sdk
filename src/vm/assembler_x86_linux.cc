@@ -9,6 +9,8 @@
 
 namespace fletch {
 
+const char* kLocalLabelPrefix = ".L";
+
 void Assembler::call(const char* name) { printf("\tcall %s\n", name); }
 
 void Assembler::j(Condition condition, const char* name) {
@@ -29,8 +31,12 @@ void Assembler::Bind(const char* prefix, const char* name) {
 
 void Assembler::DefineLong(const char* name) { printf("\t.long %s\n", name); }
 
-void Assembler::LoadNative(Register reg, Register index) {
-  Print("movl kNativeTable(,%rl,4), %rl", index, reg);
+void Assembler::LoadNative(Register destination, Register index) {
+  Print("movl kNativeTable(,%rl,4), %rl", index, destination);
+}
+
+void Assembler::LoadLabel(Register reg, const char* name) {
+  Print("leal %s, %rl", name, reg);
 }
 
 }  // namespace fletch

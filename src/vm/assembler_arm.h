@@ -129,33 +129,17 @@ class Address {
 
 class Label {
  public:
-  Label() : position_(0) {}
+  Label() : position_(-1) {}
 
-  // Returns the position for bound and linked labels. Cannot be used
-  // for unused labels.
-  int position() const {
-    ASSERT(!IsUnused());
-    return IsBound() ? -position_ - 1 : position_ - 1;
+  // Returns the position for a label. Positions are assigned on first use.
+  int position() {
+    if (position_ == -1) position_ = position_counter_++;
+    return position_;
   }
-
-  bool IsBound() const { return position_ < 0; }
-  bool IsUnused() const { return position_ == 0; }
-  bool IsLinked() const { return position_ > 0; }
 
  private:
   int position_;
-
-  void BindTo(int position) {
-    position_ = -position - 1;
-    ASSERT(IsBound());
-  }
-
-  void LinkTo(int position) {
-    position_ = position + 1;
-    ASSERT(IsLinked());
-  }
-
-  friend class Assembler;
+  static int position_counter_;
 };
 
 #define INSTRUCTION_0(name, format) \
@@ -210,7 +194,6 @@ class Assembler {
   INSTRUCTION_3(eor, "eor %r, %r, %r", Register, Register, Register);
 
   INSTRUCTION_2(ldr, "ldr %r, %a", Register, const Address&);
-  INSTRUCTION_2(ldr, "ldr %r, %I", Register, const Immediate&);
   INSTRUCTION_2(ldr, "ldr %r, =%s", Register, const char*);
   INSTRUCTION_2(ldr, "ldr %r, =%l", Register, Label*);
   INSTRUCTION_3(ldr, "ldr %r, [%r], %i", Register, Register, const Immediate&);
@@ -226,6 +209,7 @@ class Assembler {
   INSTRUCTION_3(mov, "mov%c %r, %i", Condition, Register, const Immediate&);
 
   INSTRUCTION_2(mvn, "mvn %r, %r", Register, Register);
+  INSTRUCTION_2(mvn, "mvn %r, %i", Register, const Immediate&);
 
   INSTRUCTION_2(neg, "neg %r, %r", Register, Register);
 
@@ -256,6 +240,8 @@ class Assembler {
   INSTRUCTION_2(tst, "tst %r, %i", Register, const Immediate&);
   INSTRUCTION_2(tst, "tst %r, %r", Register, Register);
 
+  void LoadInt(Register reg, int value);
+
   void BindWithPowerOfTwoAlignment(const char* name, int power);
   void Bind(const char* prefix, const char* name);
   void Bind(Label* label);
@@ -273,11 +259,12 @@ class Assembler {
   const char* LabelPrefix();
 
  private:
+  // Do not use this one directly. Use LoadInt instead.
+  INSTRUCTION_2(ldr, "ldr %r, %I", Register, const Immediate&);
+
   void Print(const char* format, ...);
   void PrintAddress(const Address* address);
   void PrintOperand(const Operand* operand);
-
-  static int NewLabelPosition();
 
   Condition Wrap(Condition condition) { return condition; }
   Register Wrap(Register reg) { return reg; }

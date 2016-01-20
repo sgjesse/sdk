@@ -4,12 +4,18 @@
 
 library fletchc.fletch_system;
 
+import 'package:compiler/src/constants/values.dart' show
+    ConstantValue;
+
 import 'package:compiler/src/elements/elements.dart' show
     ClassElement,
     ConstructorElement,
     Element,
     FieldElement,
     FunctionSignature;
+
+import 'package:compiler/src/universe/call_structure.dart' show
+    CallStructure;
 
 import 'package:persistent/persistent.dart' show
     PersistentMap;
@@ -180,6 +186,21 @@ class FletchFunction extends FletchFunctionBase {
   }
 }
 
+class ParameterStubSignature {
+  final int functionId;
+  final CallStructure callStructure;
+
+  const ParameterStubSignature(this.functionId, this.callStructure);
+
+  int get hashCode => functionId ^ callStructure.hashCode;
+
+  bool operator==(other) {
+    return other is ParameterStubSignature &&
+      other.functionId == functionId &&
+      other.callStructure == callStructure;
+  }
+}
+
 class FletchSystem {
   // functionsByElement is a subset of functionsById: Some functions do not
   // have an element reference.
@@ -196,14 +217,16 @@ class FletchSystem {
   final PersistentMap<int, FletchClass> classesById;
   final PersistentMap<ClassElement, FletchClass> classesByElement;
 
-  // TODO(ajohnsen): Should it be a map?
-  final List<FletchConstant> constants;
+  final PersistentMap<int, FletchConstant> constantsById;
+  final PersistentMap<ConstantValue, FletchConstant> constantsByValue;
 
   final PersistentMap<int, String> symbolByFletchSelectorId;
 
   final PersistentMap<int, int> gettersByFieldIndex;
 
   final PersistentMap<int, int> settersByFieldIndex;
+
+  final PersistentMap<ParameterStubSignature, FletchFunction> parameterStubs;
 
   const FletchSystem(
       this.functionsById,
@@ -212,10 +235,12 @@ class FletchSystem {
       this.tearoffsById,
       this.classesById,
       this.classesByElement,
-      this.constants,
+      this.constantsById,
+      this.constantsByValue,
       this.symbolByFletchSelectorId,
       this.gettersByFieldIndex,
-      this.settersByFieldIndex);
+      this.settersByFieldIndex,
+      this.parameterStubs);
 
   bool get isEmpty => functionsById.isEmpty;
 
@@ -233,6 +258,14 @@ class FletchSystem {
 
   Iterable<FletchFunction> functionsWhere(bool f(FletchFunction function)) {
     return functionsById.values.where(f);
+  }
+
+  FletchConstant lookupConstantById(int constantId) {
+    return constantsById[constantId];
+  }
+
+  FletchConstant lookupConstantByValue(ConstantValue value) {
+    return constantsByValue[value];
   }
 
   FletchFunction lookupConstructorInitializerByElement(
@@ -267,6 +300,10 @@ class FletchSystem {
 
   FletchClass lookupClassByElement(ClassElement element) {
     return classesByElement[element];
+  }
+
+  FletchFunction lookupParameterStub(ParameterStubSignature signature) {
+    return parameterStubs[signature];
   }
 
   int computeMaxFunctionId() {

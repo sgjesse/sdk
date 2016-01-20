@@ -51,7 +51,6 @@ class Interpreter {
   enum InterruptKind {
     kReady,
     kTerminate,
-    kImmutableAllocationFailure,
     kInterrupt,
     kYield,
     kTargetYield,
@@ -69,9 +68,6 @@ class Interpreter {
   void Run();
 
   bool IsTerminated() const { return interruption_ == kTerminate; }
-  bool IsImmutableAllocationFailure() const {
-    return interruption_ == kImmutableAllocationFailure;
-  }
   bool IsInterrupted() const { return interruption_ == kInterrupt; }
   bool IsYielded() const { return interruption_ == kYield; }
   bool IsTargetYielded() const { return interruption_ == kTargetYield; }
@@ -84,8 +80,6 @@ class Interpreter {
   TargetYieldResult target_yield_result() const { return target_yield_result_; }
 
  private:
-  InterruptKind HandleBailout();
-
   Process* const process_;
   InterruptKind interruption_;
   TargetYieldResult target_yield_result_;
@@ -101,13 +95,13 @@ extern "C" const NativeFunction kNativeTable[];
 extern "C" Process::StackCheckResult HandleStackOverflow(Process* process,
                                                          int size);
 
-extern "C" int HandleGC(Process* process);
+extern "C" void HandleGC(Process* process);
 
-extern "C" Object* HandleAllocate(Process* process, Class* clazz, int immutable,
-                                  int has_immutable_heapobject_member);
+extern "C" Object* HandleAllocate(Process* process, Class* clazz,
+                                  int immutable);
 
-extern "C" void AddToStoreBufferSlow(Process* process, Object* object,
-                                     Object* value);
+extern "C" void AddToRememberedSetSlow(Process* process, Object* object,
+                                       Object* value);
 
 extern "C" Object* HandleAllocateBoxed(Process* process, Object* value);
 
@@ -128,7 +122,7 @@ extern "C" uint8* HandleThrow(Process* process, Object* exception,
 
 extern "C" void HandleEnterNoSuchMethod(Process* process);
 
-extern "C" void HandleInvokeSelector(Process* process);
+extern "C" Function* HandleInvokeSelector(Process* process);
 
 extern "C" int HandleAtBytecode(Process* process, uint8* bcp, Object** sp);
 

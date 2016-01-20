@@ -123,12 +123,7 @@ class IncrementalCompilerContext extends _IncrementalCompilerContext
     if (kind == Diagnostic.HINT) {
       hintCount++;
     }
-    if (_uriHasUpdate(uri)) {
-      // TODO(ahe): Map location to updated source file.
-      print("$uri+$begin-$end: $text");
-    } else {
-      diagnostics.report(code, uri, begin, end, text, kind);
-    }
+    diagnostics.report(code, uri, begin, end, text, kind);
   }
 }
 
@@ -285,10 +280,9 @@ class FletchReuser extends Reuser with FletchFeatures {
   bool allowSignatureChanged(
       PartialFunctionElement before,
       PartialFunctionElement after) {
-    if ((!before.isInstanceMember || !after.isInstanceMember) &&
-        !_context.incrementalCompiler.isExperimentalModeEnabled) {
-      return cannotReuse(after, "Signature change on non-instance member "
-                         "requires 'experimental' mode");
+    if (!_context.incrementalCompiler.isExperimentalModeEnabled) {
+      return cannotReuse(
+          after, "Signature change requires 'experimental' mode");
     }
     return true;
   }

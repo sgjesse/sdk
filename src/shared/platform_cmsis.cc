@@ -170,6 +170,20 @@ int Platform::GetPid() {
   return 0;
 }
 
+#ifdef DEBUG
+void Platform::WaitForDebugger(const char* executable_name) {
+  UNIMPLEMENTED();
+}
+#endif
+
+char* Platform::GetEnv(const char* name) { return NULL; }
+
+int Platform::FormatString(char* buffer, size_t length, const char* format,
+                           ...) {
+  UNIMPLEMENTED();
+  return 0;
+}
+
 // Do nothing for errno handling for now.
 int Platform::GetLastError() { return 0; }
 void Platform::SetLastError(int value) { }

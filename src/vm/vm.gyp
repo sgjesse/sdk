@@ -61,12 +61,22 @@
           },
         }],
         [ 'OS=="win"', {
-        'asm_file_extension': '.asm',
+          'variables': {
+            'asm_file_extension': '.asm',
+          },
         }],
       ],
       'variables': {
+        'variables': {
+          'yasm_arch_flags%': [],
+        },
         'asm_file_extension%': '.S',
         'yasm_output_path': '<(INTERMEDIATE_DIR)',
+        'yasm_flags': [
+          '<@(yasm_arch_flags)',
+          '-p', 'gas',
+          '-r', 'raw',
+        ],
       },
       'includes': [
         '../../third_party/yasm/yasm_compile.gypi'
@@ -81,6 +91,7 @@
         'event_handler_posix.cc',
         'event_handler_linux.cc',
         'event_handler_macos.cc',
+        'event_handler_windows.cc',
         'event_handler_lk.cc',
         'event_handler_cmsis.cc',
         'ffi.cc',
@@ -121,8 +132,9 @@
         'multi_hashset.h',
         'native_interpreter.h',
         'native_interpreter.cc',
-        'native_process.cc',
         'native_process_disabled.cc',
+        'native_process_posix.cc',
+        'native_process_windows.cc',
         'natives.cc',
         'natives_posix.cc',
         'natives_lk.cc',
@@ -141,6 +153,8 @@
         'pair.h',
         'port.cc',
         'port.h',
+        'preempter.h',
+        'preempter.cc',
         'priority_heap.h',
         'process_handle.h',
         'process_handle.cc',
@@ -153,6 +167,7 @@
         'program_folder.h',
         'program_info_block.cc',
         'program_info_block.h',
+        'remembered_set.h',
         'scheduler.cc',
         'scheduler.h',
         'selector_row.cc',
@@ -167,8 +182,6 @@
         'snapshot.h',
         'sort.h',
         'sort.cc',
-        'storebuffer.cc',
-        'storebuffer.h',
         'thread.h',
         'thread_pool.cc',
         'thread_pool.h',
@@ -290,6 +303,7 @@
         'generator.cc',
         'interpreter_arm.cc',
         'interpreter_x86.cc',
+        'interpreter_x64.cc',
       ],
     },
     {

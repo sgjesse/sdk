@@ -9,6 +9,8 @@
 
 namespace fletch {
 
+static const char* kLocalLabelPrefix = "L";
+
 #if defined(FLETCH_TARGET_ANDROID)
 static const char* kPrefix = "";
 #else
@@ -40,8 +42,12 @@ void Assembler::DefineLong(const char* name) {
   printf("\t.long %s%s\n", kPrefix, name);
 }
 
-void Assembler::LoadNative(Register reg, Register index) {
-  Print("movl %skNativeTable(,%rl,4), %rl", kPrefix, index, reg);
+void Assembler::LoadNative(Register destination, Register index) {
+  Print("movl %skNativeTable(,%rl,4), %rl", kPrefix, index, destination);
+}
+
+void Assembler::LoadLabel(Register reg, const char* name) {
+  Print("leal %s%s, %rl", kPrefix, name, reg);
 }
 
 }  // namespace fletch

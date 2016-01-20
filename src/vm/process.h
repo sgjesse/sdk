@@ -16,8 +16,8 @@
 #include "src/vm/natives.h"
 #include "src/vm/process_handle.h"
 #include "src/vm/program.h"
+#include "src/vm/remembered_set.h"
 #include "src/vm/signal.h"
-#include "src/vm/storebuffer.h"
 #include "src/vm/thread.h"
 
 namespace fletch {
@@ -96,13 +96,7 @@ class Process {
   Array* statics() const { return statics_; }
   Object* exception() const { return exception_; }
   void set_exception(Object* object) { exception_ = object; }
-#ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-  Heap* heap() { return &heap_; }
-#else
   Heap* heap() { return program()->shared_heap()->heap(); }
-#endif
-  Heap* immutable_heap() { return immutable_heap_; }
-  void set_immutable_heap(Heap* heap) { immutable_heap_ = heap; }
 
   Coroutine* coroutine() const { return coroutine_; }
   void UpdateCoroutine(Coroutine* coroutine);
@@ -158,13 +152,6 @@ class Process {
   // Returns either a Smi or a LargeInteger.
   Object* ToInteger(int64 value);
 
-  void CollectMutableGarbage();
-
-  // Perform garbage collection and chain all stack objects.
-  // Returns the number of stacks found in the heap.
-  int CollectMutableGarbageAndChainStacks();
-  int CollectGarbageAndChainStacks();
-
   void ValidateHeaps(SharedHeap* shared_heap);
 
   // Iterate all pointers reachable from this process object.
@@ -198,15 +185,6 @@ class Process {
   void TakeLookupCache();
   void ReleaseLookupCache() { primary_lookup_cache_ = NULL; }
 
-  // Program GC support. Cook the stack to rewrite bytecode pointers
-  // to a pair of a function pointer and a delta. Uncook the stack to
-  // rewriting the (now potentially moved) function pointer and the
-  // delta into a direct bytecode pointer again.
-  void CookStacks(int number_of_stacks);
-  void UncookAndUnchainStacks();
-
-  bool stacks_are_cooked() { return !cooked_stack_deltas_.is_empty(); }
-
   // Program GC support. Update breakpoints after having moved function.
   // Bytecode pointers need to be updated.
   void UpdateBreakpoints();
@@ -221,8 +199,6 @@ class Process {
     ASSERT(thread_state == NULL || thread_state_.load() == NULL);
     thread_state_ = thread_state;
   }
-
-  void TakeChildHeaps();
 
   void RegisterFinalizer(HeapObject* object, WeakPointerCallback callback);
   void UnregisterFinalizer(HeapObject* object);
@@ -255,17 +231,16 @@ class Process {
 
   RandomXorShift* random() { return &random_; }
 
-  StoreBuffer* store_buffer() { return &store_buffer_; }
+  RememberedSet* remembered_set() { return &remembered_set_; }
 
   MessageMailbox* mailbox() { return &mailbox_; }
 
   Signal* signal() { return signal_.load(); }
 
   void RecordStore(HeapObject* object, Object* value) {
-    if (value->IsHeapObject() && value->IsImmutable()) {
+    if (value->IsHeapObject()) {
       ASSERT(!program()->heap()->space()->Includes(object->address()));
-      ASSERT(heap()->space()->Includes(object->address()));
-      store_buffer_.Insert(object);
+      remembered_set_.Insert(object);
     }
   }
 
@@ -273,13 +248,13 @@ class Process {
 
   // If you add an offset here, remember to add the corresponding static_assert
   // in process.cc.
-  static const uword kCoroutineOffset = 0;
-  static const uword kStackLimitOffset = kCoroutineOffset + sizeof(void*);
-  static const uword kProgramOffset = kStackLimitOffset + sizeof(void*);
-  static const uword kStaticsOffset = kProgramOffset + sizeof(void*);
-  static const uword kExceptionOffset = kStaticsOffset + sizeof(void*);
-  static const uword kPrimaryLookupCacheOffset =
-      kExceptionOffset + sizeof(void*);
+  static const uword kNativeStackOffset = 0;
+  static const uword kCoroutineOffset = kNativeStackOffset + kWordSize;
+  static const uword kStackLimitOffset = kCoroutineOffset + kWordSize;
+  static const uword kProgramOffset = kStackLimitOffset + kWordSize;
+  static const uword kStaticsOffset = kProgramOffset + kWordSize;
+  static const uword kExceptionOffset = kStaticsOffset + kWordSize;
+  static const uword kPrimaryLookupCacheOffset = kExceptionOffset + kWordSize;
 
  private:
   friend class Interpreter;
@@ -306,6 +281,7 @@ class Process {
 
   // Put these first so they can be accessed from the interpreter without
   // issues around object layout.
+  void* native_stack_;
   Coroutine* coroutine_;
   Atomic<uword> stack_limit_;
   Program* program_;
@@ -319,18 +295,11 @@ class Process {
 
   RandomXorShift random_;
 
-#ifdef FLETCH_ENABLE_MULTIPLE_PROCESS_HEAPS
-  Heap heap_;
-#endif
-
-  Heap* immutable_heap_;
-  StoreBuffer store_buffer_;
+  RememberedSet remembered_set_;
   Links links_;
 
   Atomic<State> state_;
   Atomic<ThreadState*> thread_state_;
-
-  List<List<int>> cooked_stack_deltas_;
 
   // Next pointer used by the Scheduler.
   Process* next_;

@@ -1001,6 +1001,86 @@ main() {
 ''',
 
   r'''
+super_call_simple_change
+==> main.dart.patch <==
+// Test that super calls are dispatched correctly
+class C {
+
+  foo() {
+<<<< ["instance is null","v1"]
+    print('v1');
+==== "v2"
+    print('v2');
+>>>>>
+  }
+}
+
+class B extends C {
+  bar() {
+    super.foo();
+  }
+}
+
+var instance;
+
+main() {
+  if (instance == null) {
+    print('instance is null');
+    instance = new B();
+  }
+
+  instance.bar();
+}
+
+
+''',
+
+  r'''
+super_call_signature_change
+==> main.dart.patch <==
+// Test that super calls are dispatched correctly
+class C {
+<<<< ["instance is null", "v1", "super.foo()", "super.foo(42) threw"]
+  foo() {
+    print('v1');
+  }
+==== ["super.foo() threw", "v2", "super.foo(42)"]
+  foo(int i) {
+    print('v2');
+  }
+>>>>>
+}
+
+class B extends C {
+  superFooNoArgs() => super.foo();
+  superFooOneArg(x) => super.foo(x);
+}
+
+var instance;
+
+main() {
+  if (instance == null) {
+    print('instance is null');
+    instance = new B();
+  }
+  try {
+    instance.superFooNoArgs();
+    print("super.foo()");
+  } catch (e) {
+    print("super.foo() threw");
+  }
+  try {
+    instance.superFooOneArg(42);
+    print("super.foo(42)");
+  } catch (e) {
+    print("super.foo(42) threw");
+  }
+}
+
+
+''',
+
+  r'''
 add_class
 ==> main.dart.patch <==
 // Test that adding a class is supported
@@ -1348,6 +1428,44 @@ main() {
 ==== "v2"
   print(const C('v2').value);
 >>>>
+}
+
+
+''',
+
+  r'''
+constant_retaining
+==> main.dart.patch <==
+// Test that constants are retained
+class Foo {
+  const Foo();
+}
+
+class Bar {
+  final f = const Foo();
+  const Bar();
+}
+
+class Baz {
+  final f = const Foo();
+  const Baz();
+}
+
+class C {
+  foo() {
+<<<< ["true"]
+    return const Foo();
+==== ["true"]
+    return const Bar().f;
+==== ["true"]
+    return const Baz().f;
+>>>>
+  }
+}
+
+void main() {
+  var c = new C();
+  print(identical(c.foo(), const Foo()));
 }
 
 

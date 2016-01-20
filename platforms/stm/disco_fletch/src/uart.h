@@ -53,10 +53,8 @@ class Uart {
 
   static const int kTxBlockSize = 10;
 
-  bool readyToRead_;
-  bool readyToWrite_;
-
   uint8_t read_data_;
+
   CircularBuffer* read_buffer_;
   CircularBuffer* write_buffer_;
 
@@ -64,18 +62,24 @@ class Uart {
 
   UART_HandleTypeDef* uart_;
 
+  // Sends a message to the event-handler with the current flags if there is a
+  // registered listing Port.
   void SendMessage();
 
   fletch::Device device_;
 
   // Transmit status.
   fletch::Mutex* tx_mutex_;
+
   uint8_t tx_data_[kTxBlockSize];  // Buffer send to the HAL.
+
   // Are we currently waiting for transmission to finish.
   bool tx_pending_;
-  SemaphoreHandle_t semaphore_;
-  fletch::Atomic<uint32_t> interrupt_flags;
 
+  // Used to signal new events from the event handler.
+  SemaphoreHandle_t semaphore_;
+
+  fletch::Atomic<uint32_t> interrupt_flags;
 };
 
 Uart *GetUart(int device_id);

@@ -178,5 +178,5 @@ extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
   __HAL_UART_CLEAR_PEFLAG(huart);
   __HAL_UART_CLEAR_NEFLAG(huart);
 
-   uart->ReturnFromInterrupt(kErrorBit);
+  uart->ReturnFromInterrupt(kErrorBit);
 }

@@ -80,6 +80,7 @@ main() {
   var uart = new Uart();
 
   uart.writeString("\rWelcome to Dart UART echo!\r\n");
+  uart.writeString("--------------------------\r\n");
   while (true) {
     uart.write(uart.readNext());
   }

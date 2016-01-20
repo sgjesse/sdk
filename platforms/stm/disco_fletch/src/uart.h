@@ -19,10 +19,10 @@
 // Interface to the universal asynchronous receiver/transmitter (UART).
 class Uart {
  public:
-  // Access theq UART on the first UART port.
+  // Access the UART on the first UART port.
   Uart();
 
-  // Opens the uart. Returns the port id used for listening.
+  // Opens the uart. Returns the device id used for listening.
   int Open();
 
   // Reads up to `count` bytes from the UART into `buffer` starting at
@@ -42,13 +42,17 @@ class Uart {
 
   void Task();
 
-  void EnsureTransmission();
-
   void ReturnFromInterrupt(uint32_t flag);
 
   uint32_t error_;
 
  private:
+  // Sends a message to the event-handler with the current flags if there is a
+  // registered listing Port.
+  void SendMessage();
+
+  void EnsureTransmission();
+
   uint32_t mask_;
 
   static const int kTxBlockSize = 10;
@@ -61,10 +65,6 @@ class Uart {
   int device_id_ = -1;
 
   UART_HandleTypeDef* uart_;
-
-  // Sends a message to the event-handler with the current flags if there is a
-  // registered listing Port.
-  void SendMessage();
 
   fletch::Device device_;
 

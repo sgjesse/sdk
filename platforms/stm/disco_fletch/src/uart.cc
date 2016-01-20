@@ -81,23 +81,6 @@ uint32_t Uart::GetError() {
   return error_;
 }
 
-void Uart::EnsureTransmission() {
-  if (!tx_pending_) {
-    // Don't block when there is nothing to send.
-    int bytes = write_buffer_->Read(
-        tx_data_, kTxBlockSize, CircularBuffer::kDontBlock);
-    if (bytes > 0) {
-      HAL_StatusTypeDef status = HAL_UART_Transmit_IT(uart_, tx_data_, bytes);
-      if (status != HAL_OK) {
-        LOG_ERROR("%d\n", status);
-      }
-      tx_pending_ = true;
-    } else {
-      device_.RemoveFlag(kTransmittedBit);
-    }
-  }
-}
-
 void Uart::Task() {
   // Process notifications from the interrupt handlers.
   for (;;) {
@@ -127,6 +110,23 @@ void Uart::Task() {
     if ((flags & kErrorBit) != 0) {
       device_.AddFlag(kErrorBit);
       SendMessage();
+    }
+  }
+}
+
+void Uart::EnsureTransmission() {
+  if (!tx_pending_) {
+    // Don't block when there is nothing to send.
+    int bytes = write_buffer_->Read(
+        tx_data_, kTxBlockSize, CircularBuffer::kDontBlock);
+    if (bytes > 0) {
+      HAL_StatusTypeDef status = HAL_UART_Transmit_IT(uart_, tx_data_, bytes);
+      if (status != HAL_OK) {
+        LOG_ERROR("%d\n", status);
+      }
+      tx_pending_ = true;
+    } else {
+      device_.RemoveFlag(kTransmittedBit);
     }
   }
 }

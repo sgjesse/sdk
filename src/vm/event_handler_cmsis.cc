@@ -14,9 +14,14 @@
 
 namespace fletch {
 
-// Pseudo device-id indicating a interrupt.
+// Pseudo device-id.
+// Sending a message with this device-id signals an interruption of the
+// event-handler.
 const int kInterruptDeviceId = -1;
 
+// Dummy-class. Currently we don't store anything in EventHandler::data_. But
+// if we set it to NULL, EventHandler::EnsureInitialized will not realize it is
+// initialized.
 class Data {};
 
 void EventHandler::Create() {
@@ -39,7 +44,9 @@ Object* EventHandler::Add(Process* process, Object* id, Port* port,
 
   Device *device = GetDevice(device_id);
   Port *existing = device->port;
+
   if (existing != NULL) FATAL("Already listening to device");
+
   int device_flags = device->flags;
   if ((flags & device_flags) != 0) {
     // There is already an event waiting. Send a message immediately.

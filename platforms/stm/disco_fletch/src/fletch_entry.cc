@@ -22,7 +22,7 @@ extern unsigned char _binary_snapshot_size;
 
 extern PageAllocator* page_allocator;
 
-extern "C" size_t UartOpen(int device_id, uint8_t* buffer, size_t count) {
+extern "C" size_t UartOpen() {
   Uart *uart = new Uart();
   return uart->Open();
 }

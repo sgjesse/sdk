@@ -169,9 +169,9 @@ extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-   Uart *uart = openUarts[huart];
-   uart->error_ = HAL_UART_GetError(huart);
-   LOG_ERROR("UART Error %d\n", uart->error_);
+  Uart *uart = openUarts[huart];
+  uart->error_ = HAL_UART_GetError(huart);
+  LOG_ERROR("UART Error %d\n", uart->error_);
   // Clear all errors.
   __HAL_UART_CLEAR_OREFLAG(huart);
   __HAL_UART_CLEAR_FEFLAG(huart);

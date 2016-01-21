@@ -12,6 +12,9 @@ import "dart:fletch.os" hide sleep;
 
 ForeignFunction ledOn = ForeignLibrary.main.lookup('BSP_LED_On');
 ForeignFunction ledOff = ForeignLibrary.main.lookup('BSP_LED_Off');
+ForeignFunction initializeProducer =
+    ForeignLibrary.main.lookup('initialize_producer');
+ForeignFunction notifyRead = ForeignLibrary.main.lookup('notify_read');
 
 // How many timers to schedule.
 const int count = 3;
@@ -22,16 +25,17 @@ int nextExpectedTimer = count - 1;
 //
 // When a message is received, turns on the LED, and starts a timer to turn it
 // off again.
-listenPort1() {
-  int portId = 1;
+listenProducer() {
+  int deviceId = initializeProducer.icall$0();
   Channel channel = new Channel();
   Port port = new Port(channel);
   for (int i = 0; i < 50; i++) {
-    eventHandler.registerPortForNextEvent(portId, port, 0);
+    eventHandler.registerPortForNextEvent(deviceId, port, 1);
     int msg = channel.receive();
     ledOn.vcall$1(0);
+    notifyRead.vcall$1(deviceId);
     Fiber.fork(() {
-      Channel offChannel = sleep(50);
+      Channel offChannel = sleep(100);
       offChannel.receive();
       ledOff.vcall$1(0);
     });
@@ -62,7 +66,7 @@ main() {
     fibers.add(fiber);
   }
   Fiber.yield();
-  fibers.add(Fiber.fork(listenPort1));
+  fibers.add(Fiber.fork(listenProducer));
 
   fibers.forEach((Fiber fiber) => fiber.join);
 }

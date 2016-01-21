@@ -30,11 +30,13 @@ const int kMessageFrequency = 400;
 
 // Sends a message on a port_id with a fixed interval.
 static void MessageQueueProducer(const void *argument) {
+  int device_id = reinterpret_cast<int>(argument);
+  fletch::Device *device = fletch::GetDevice(device_id);
   uint16_t counter = 0;
   for (;;) {
     counter++;
-    int port_id = 1;
-    int status = fletch::SendMessageCmsis(port_id, counter);
+    device->AddFlag(1);
+    int status = fletch::SendMessageCmsis(device_id);
     if (status != osOK) {
       LOG_DEBUG("Error Sending %d\n", status);
     }
@@ -42,9 +44,25 @@ static void MessageQueueProducer(const void *argument) {
   }
 }
 
+void NotifyRead(int device_id) {
+  fletch::Device *device = fletch::GetDevice(device_id);
+  device->RemoveFlag(1);
+}
+
+int InitializeProducer() {
+  fletch::Device *device = new fletch::Device(NULL, 0, 0, NULL);
+
+  osThreadDef(PRODUCER, MessageQueueProducer, osPriorityNormal, 0, 2 * 1024);
+  osThreadCreate(osThread(PRODUCER), NULL);
+
+  return fletch::InstallDevice(device);
+}
+
 FLETCH_EXPORT_TABLE_BEGIN
   FLETCH_EXPORT_TABLE_ENTRY("BSP_LED_On", BSP_LED_On)
   FLETCH_EXPORT_TABLE_ENTRY("BSP_LED_Off", BSP_LED_Off)
+  FLETCH_EXPORT_TABLE_ENTRY("initialize_producer", InitializeProducer)
+  FLETCH_EXPORT_TABLE_ENTRY("notify_read", NotifyRead)
 FLETCH_EXPORT_TABLE_END
 
 // Run fletch on the linked in snapshot.
@@ -84,9 +102,6 @@ void FletchEntry(void const * argument) {
   osThreadDef(START_FLETCH, StartFletch, osPriorityNormal, 0,
               3 * 1024 /* stack size */);
   osThreadCreate(osThread(START_FLETCH), NULL);
-
-  osThreadDef(PRODUCER, MessageQueueProducer, osPriorityNormal, 0, 2 * 1024);
-  osThreadCreate(osThread(PRODUCER), NULL);
 
   // No more to do right now.
   for (;;) {

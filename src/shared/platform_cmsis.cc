@@ -32,15 +32,15 @@ int InstallDevice(Device *device) {
   return devices.size() - 1;
 }
 
-Device *GetDevice(int device_id) {
-  return devices[device_id];
+Device *GetDevice(int handle) {
+  return devices[handle];
 }
 
 // Sends a message on the fletch osMailQ used by the event handler.
-int SendMessageCmsis(uint32_t device_id) {
+int SendMessageCmsis(uint32_t handle) {
   CmsisMessage *cmsisMessage =
       reinterpret_cast<CmsisMessage*>(osMailAlloc(fletchMailQ, 0));
-  cmsisMessage->device_id = device_id;
+  cmsisMessage->handle = handle;
   int r = osMailPut(GetFletchMailQ(), reinterpret_cast<void*>(cmsisMessage));
   return r;
 }

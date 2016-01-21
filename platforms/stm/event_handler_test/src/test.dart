@@ -26,14 +26,14 @@ int nextExpectedTimer = count - 1;
 // When a message is received, turns on the LED, and starts a timer to turn it
 // off again.
 listenProducer() {
-  int deviceId = initializeProducer.icall$0();
+  int handle = initializeProducer.icall$0();
   Channel channel = new Channel();
   Port port = new Port(channel);
   for (int i = 0; i < 50; i++) {
-    eventHandler.registerPortForNextEvent(deviceId, port, 1);
+    eventHandler.registerPortForNextEvent(handle, port, 1);
     int msg = channel.receive();
     ledOn.vcall$1(0);
-    notifyRead.vcall$1(deviceId);
+    notifyRead.vcall$1(handle);
     Fiber.fork(() {
       Channel offChannel = sleep(100);
       offChannel.receive();

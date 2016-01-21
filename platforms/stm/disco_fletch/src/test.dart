@@ -13,12 +13,12 @@ final _uartWrite = ForeignLibrary.main.lookup('uart_write');
 final _uart_getError = ForeignLibrary.main.lookup('uart_get_error');
 
 class Uart {
-  int deviceId;
+  int handle;
   Port port;
   Channel channel;
 
   Uart() {
-    deviceId = _uartOpen.icall$0();
+    handle = _uartOpen.icall$0();
     channel = new Channel();
     port = new Port(channel);
   }
@@ -32,16 +32,16 @@ class Uart {
     int event = 0;
     while (event & READ_EVENT == 0) {
       eventHandler.registerPortForNextEvent(
-          deviceId, port, READ_EVENT | ERROR_EVENT);
+          handle, port, READ_EVENT | ERROR_EVENT);
       event = channel.receive();
       if (event & ERROR_EVENT != 0) {
-        print("Error ${_uart_getError.icall$1(deviceId)}.");
+        print("Error ${_uart_getError.icall$1(handle)}.");
       }
     }
 
     var mem = new ForeignMemory.allocated(10);
     try {
-      var read = _uartRead.icall$3(deviceId, mem, 10);
+      var read = _uartRead.icall$3(handle, mem, 10);
       assert(read > 0);
       var result = new Uint8List(read);
       mem.copyBytesToList(result, 0, read, 0);
@@ -68,9 +68,9 @@ class Uart {
   void _write(ForeignMemory mem, int size) {
     int written = 0;
     while (written < size) {
-      written += _uartWrite.icall$3(deviceId, mem, size);
+      written += _uartWrite.icall$3(handle, mem, size);
       if (written == size) break;
-      eventHandler.registerPortForNextEvent(deviceId, port, WRITE_EVENT);
+      eventHandler.registerPortForNextEvent(handle, port, WRITE_EVENT);
       channel.receive();
     }
   }

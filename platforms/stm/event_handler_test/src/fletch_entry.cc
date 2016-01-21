@@ -30,13 +30,13 @@ const int kMessageFrequency = 400;
 
 // Sends a message on a port_id with a fixed interval.
 static void MessageQueueProducer(const void *argument) {
-  int device_id = reinterpret_cast<int>(argument);
-  fletch::Device *device = fletch::GetDevice(device_id);
+  int handle = reinterpret_cast<int>(argument);
+  fletch::Device *device = fletch::GetDevice(handle);
   uint16_t counter = 0;
   for (;;) {
     counter++;
     device->AddFlag(1);
-    int status = fletch::SendMessageCmsis(device_id);
+    int status = fletch::SendMessageCmsis(handle);
     if (status != osOK) {
       LOG_DEBUG("Error Sending %d\n", status);
     }
@@ -44,18 +44,20 @@ static void MessageQueueProducer(const void *argument) {
   }
 }
 
-void NotifyRead(int device_id) {
-  fletch::Device *device = fletch::GetDevice(device_id);
+void NotifyRead(int handle) {
+  fletch::Device *device = fletch::GetDevice(handle);
   device->RemoveFlag(1);
 }
 
 int InitializeProducer() {
   fletch::Device *device = new fletch::Device(NULL, 0, 0, NULL);
 
-  osThreadDef(PRODUCER, MessageQueueProducer, osPriorityNormal, 0, 2 * 1024);
-  osThreadCreate(osThread(PRODUCER), NULL);
+  int handle = fletch::InstallDevice(device);
 
-  return fletch::InstallDevice(device);
+  osThreadDef(PRODUCER, MessageQueueProducer, osPriorityNormal, 0, 2 * 1024);
+  osThreadCreate(osThread(PRODUCER), reinterpret_cast<void*>(handle));
+
+  return handle;
 }
 
 FLETCH_EXPORT_TABLE_BEGIN

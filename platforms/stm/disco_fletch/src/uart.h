@@ -62,7 +62,7 @@ class Uart {
   CircularBuffer* read_buffer_;
   CircularBuffer* write_buffer_;
 
-  int device_id_ = -1;
+  int handle_ = -1;
 
   UART_HandleTypeDef* uart_;
 
@@ -82,6 +82,6 @@ class Uart {
   fletch::Atomic<uint32_t> interrupt_flags;
 };
 
-Uart *GetUart(int device_id);
+Uart *GetUart(int handle);
 
 #endif  // PLATFORMS_STM_DISCO_FLETCH_SRC_UART_H_

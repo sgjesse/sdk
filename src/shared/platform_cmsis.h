@@ -86,7 +86,7 @@ static const int kSemaphoreSize = sizeof(int32_t) * 2;
 osMailQId GetFletchMailQ();
 
 struct CmsisMessage {
-  uint32_t device_id;
+  uint32_t handle;
 };
 
 struct Device {
@@ -127,11 +127,11 @@ struct Device {
   }
 };
 
-Device *GetDevice(int device_id);
+Device *GetDevice(int handle);
 
 // Send a message to the event handler, that an event has happened on
-// [device_id].
-int SendMessageCmsis(uint32_t device_id);
+// [handle].
+int SendMessageCmsis(uint32_t handle);
 
 // Installs [device] so it can be listened to by the event handler.
 int InstallDevice(Device *device);

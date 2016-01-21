@@ -47,7 +47,7 @@ void UartTask(void *arg) {
 }
 
 int Uart::Open() {
-  device_id_ = fletch::InstallDevice(&device_);
+  handle_ = fletch::InstallDevice(&device_);
   openUarts[uart_] = this;
 
   TaskHandle_t handle;
@@ -56,7 +56,7 @@ int Uart::Open() {
   // Start receiving.
   HAL_UART_Receive_IT(uart_, &read_data_, 1);
 
-  return device_id_;
+  return handle_;
 }
 
 size_t Uart::Read(uint8_t* buffer, size_t count) {
@@ -133,12 +133,12 @@ void Uart::EnsureTransmission() {
 
 void Uart::SendMessage() {
   if ((device_.port != NULL) && ((device_.flags & device_.mask) != 0)) {
-    fletch::SendMessageCmsis(device_id_);
+    fletch::SendMessageCmsis(handle_);
   }
 }
 
-Uart *GetUart(int device_id) {
-  return reinterpret_cast<Uart*>(fletch::GetDevice(device_id)->data);
+Uart *GetUart(int handle) {
+  return reinterpret_cast<Uart*>(fletch::GetDevice(handle)->data);
 }
 
 // Shared return from interrupt handler. Will set the specified flag

@@ -17,7 +17,7 @@ namespace fletch {
 // Pseudo device-id.
 // Sending a message with this device-id signals an interruption of the
 // event-handler.
-const int kInterruptDeviceId = -1;
+const int kInterruptHandle = -1;
 
 // Dummy-class. Currently we don't store anything in EventHandler::data_. But
 // if we set it to NULL, EventHandler::EnsureInitialized will not realize it is
@@ -29,7 +29,7 @@ void EventHandler::Create() {
 }
 
 void EventHandler::Interrupt() {
-  SendMessageCmsis(kInterruptDeviceId);
+  SendMessageCmsis(kInterruptHandle);
 }
 
 Object* EventHandler::Add(Process* process, Object* id, Port* port,
@@ -38,11 +38,11 @@ Object* EventHandler::Add(Process* process, Object* id, Port* port,
 
   EnsureInitialized();
 
-  int device_id = Smi::cast(id)->value();
+  int handle = Smi::cast(id)->value();
 
   ScopedMonitorLock locker(monitor_);
 
-  Device *device = GetDevice(device_id);
+  Device *device = GetDevice(handle);
   Port *existing = device->port;
 
   if (existing != NULL) FATAL("Already listening to device");
@@ -92,9 +92,9 @@ void EventHandler::Run() {
     if (event.status == osEventMail) {
       CmsisMessage *message = reinterpret_cast<CmsisMessage*>(event.value.p);
 
-      int device_id = message->device_id;
-      if (device_id != kInterruptDeviceId) {
-        Device *device = GetDevice(device_id);
+      int handle = message->handle;
+      if (handle != kInterruptHandle) {
+        Device *device = GetDevice(handle);
         Port *port = device->port;
         int device_flags = device->flags;
         if (port == NULL || ((device->mask & device_flags) == 0)) {

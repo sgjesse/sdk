@@ -8,8 +8,8 @@
 #include <inttypes.h>
 
 #include <FreeRTOS.h>
-#include <semphr.h>
 #include <cmsis_os.h>
+#include <semphr.h>
 #include <stm32f7xx_hal.h>
 
 #include "platforms/stm/disco_fletch/src/circular_buffer.h"
@@ -77,9 +77,10 @@ class Uart {
   bool tx_pending_;
 
   // Used to signal new events from the event handler.
-  SemaphoreHandle_t semaphore_;
+  osSemaphoreId semaphore_;
 
   fletch::Atomic<uint32_t> interrupt_flags;
+
 };
 
 Uart *GetUart(int handle);

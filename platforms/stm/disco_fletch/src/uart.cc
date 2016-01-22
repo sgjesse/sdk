@@ -8,8 +8,6 @@
 
 #include <stm32f7xx_hal.h>
 
-#include <task.h>
-
 #include "platforms/stm/disco_fletch/src/logger.h"
 
 #include "src/shared/atomic.h"
@@ -29,6 +27,7 @@ const int kErrorBit = 1 << 2;
 const int kRxBufferSize = 511;
 const int kTxBufferSize = 511;
 
+
 Uart::Uart() : device_(NULL, 0, 0, this) {
   uart_ = &huart1;
   read_buffer_ = new CircularBuffer(kRxBufferSize);
@@ -36,25 +35,30 @@ Uart::Uart() : device_(NULL, 0, 0, this) {
   tx_pending_ = false;
   interrupt_flags.store(0);
   tx_mutex_ = fletch::Platform::CreateMutex();
-  semaphore_ = xSemaphoreCreateCounting(3, 0);
+
+  osSemaphoreDef(uart_semaphore);
+  semaphore_ = osSemaphoreCreate(osSemaphore(uart_semaphore), 3);
 }
 
 fletch::HashMap<UART_HandleTypeDef*, Uart*> openUarts =
     fletch::HashMap<UART_HandleTypeDef*, Uart*>();
 
-void UartTask(void *arg) {
-  reinterpret_cast<Uart*>(arg)->Task();
+static void UartTask(const void *arg) {
+  const_cast<Uart*>(reinterpret_cast<const Uart*>(arg))->Task();
 }
 
 int Uart::Open() {
   handle_ = fletch::InstallDevice(&device_);
   openUarts[uart_] = this;
 
-  TaskHandle_t handle;
-  xTaskCreate(UartTask, "Uart", 1024, this, configMAX_PRIORITIES - 1, &handle);
+  osThreadDef(UART_TASK, UartTask, osPriorityHigh, 0, 1024);
+  osThreadCreate(osThread(UART_TASK), reinterpret_cast<void*>(this));
 
   // Start receiving.
   HAL_UART_Receive_IT(uart_, &read_data_, 1);
+
+  // We are ready to write.
+  device_.AddFlag(kTransmittedBit);
 
   return handle_;
 }
@@ -85,8 +89,9 @@ void Uart::Task() {
   // Process notifications from the interrupt handlers.
   for (;;) {
     // Wait for an event to process.
-    xSemaphoreTake(semaphore_, portMAX_DELAY);
+    osSemaphoreWait(semaphore_, osWaitForever);
     uint32_t flags = interrupt_flags.exchange(0);
+    bool send_message = false;
     if ((flags & kReceivedBit) != 0) {
       // Don't block when writing to the buffer. Buffer overrun will
       // cause lost data.
@@ -96,19 +101,24 @@ void Uart::Task() {
       if (status != HAL_OK) {
         LOG_ERROR("%d\n", status);
       }
-      SendMessage();
+      send_message = true;
     }
     if ((flags & kTransmittedBit) != 0) {
-      device_.AddFlag(kTransmittedBit);
       fletch::ScopedLock lock(tx_mutex_);
       tx_pending_ = false;
       EnsureTransmission();
       if (!write_buffer_->IsFull()) {
-        SendMessage();
+        if (device_.AddFlag(kTransmittedBit)) {
+          send_message = true;
+        }
       }
     }
     if ((flags & kErrorBit) != 0) {
-      device_.AddFlag(kErrorBit);
+      if (device_.AddFlag(kErrorBit)) {
+        send_message = true;
+      }
+    }
+    if (send_message) {
       SendMessage();
     }
   }
@@ -125,8 +135,6 @@ void Uart::EnsureTransmission() {
         LOG_ERROR("%d\n", status);
       }
       tx_pending_ = true;
-    } else {
-      device_.RemoveFlag(kTransmittedBit);
     }
   }
 }
@@ -154,7 +162,7 @@ void Uart::ReturnFromInterrupt(uint32_t flag) {
 
   // Pass control to the thread handling interrupts.
   portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
-  xSemaphoreGiveFromISR(semaphore_, &xHigherPriorityTaskWoken);
+  osSemaphoreRelease(semaphore_);
   portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 }
 

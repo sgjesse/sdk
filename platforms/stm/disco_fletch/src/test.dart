@@ -35,6 +35,7 @@ class Uart {
           handle, port, READ_EVENT | ERROR_EVENT);
       event = channel.receive();
       if (event & ERROR_EVENT != 0) {
+        // TODO(sigurdm): Find the right way of handling errors.
         print("Error ${_uart_getError.icall$1(handle)}.");
       }
     }
@@ -70,6 +71,7 @@ class Uart {
     while (written < size) {
       written += _uartWrite.icall$3(handle, mem, size);
       if (written == size) break;
+      // We do not listen for errors here, because writing cannot fail.
       eventHandler.registerPortForNextEvent(handle, port, WRITE_EVENT);
       channel.receive();
     }

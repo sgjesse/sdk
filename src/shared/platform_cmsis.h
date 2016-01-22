@@ -108,22 +108,28 @@ struct Device {
   // Data associated with the device.
   void *data;
 
-  void AddFlag(uint32_t flag) {
+  // Sets the [flag] in [flags]. Returns true if anything changed.
+  bool AddFlag(uint32_t flag) {
     uint32_t flags = this->flags;
+    if ((flags & flag) != 0) return false;
     bool success = false;
     while (!success) {
       uint32_t new_flags = flags | flag;
       success = this->flags.compare_exchange_weak(flags, new_flags);
     }
+    return true;
   }
 
-  void RemoveFlag(uint32_t flag) {
+  // Disables the [flag]  in [flags]. Returns true if anything changed.
+  bool RemoveFlag(uint32_t flag) {
     uint32_t flags = this->flags;
+    if ((flags & flag) == 0) return false;
     bool success = false;
     while (!success) {
       uint32_t new_flags = flags & ~flag;
       success = this->flags.compare_exchange_weak(flags, new_flags);
     }
+    return true;
   }
 };
 

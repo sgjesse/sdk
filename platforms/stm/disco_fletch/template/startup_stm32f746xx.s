@@ -126,6 +126,7 @@ LoopFillZerobss:
     .section  .text.Default_Handler,"ax",%progbits
 Default_Handler:
 Infinite_Loop:
+  bkpt
   b  Infinite_Loop
   .size  Default_Handler, .-Default_Handler
 /******************************************************************************

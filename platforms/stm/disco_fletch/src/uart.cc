@@ -48,7 +48,7 @@ static void UartTask(const void *arg) {
 }
 
 int Uart::Open() {
-  handle_ = fletch::InstallDevice(&device_);
+  handle_ = fletch::DeviceManager::GetDeviceManager()->InstallDevice(&device_);
   openUarts[uart_] = this;
 
   osThreadDef(UART_TASK, UartTask, osPriorityHigh, 0, 1024);
@@ -141,12 +141,13 @@ void Uart::EnsureTransmission() {
 
 void Uart::SendMessage() {
   if ((device_.port != NULL) && ((device_.flags & device_.mask) != 0)) {
-    fletch::SendMessageCmsis(handle_);
+    fletch::DeviceManager::GetDeviceManager()->SendMessage(handle_);
   }
 }
 
 Uart *GetUart(int handle) {
-  return reinterpret_cast<Uart*>(fletch::GetDevice(handle)->data);
+  return reinterpret_cast<Uart*>(
+      fletch::DeviceManager::GetDeviceManager()->GetDevice(handle)->data);
 }
 
 // Shared return from interrupt handler. Will set the specified flag

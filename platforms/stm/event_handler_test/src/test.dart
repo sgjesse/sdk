@@ -17,11 +17,12 @@ ForeignFunction initializeProducer =
 ForeignFunction notifyRead = ForeignLibrary.main.lookup('notify_read');
 
 // How many timers to schedule.
-const int count = 3;
+const int count = 4;
 
 int nextExpectedTimer = count - 1;
 
-// Listens continuously for messages on port 1.
+// Listens continuously for messages on the handle returned by
+// [initializeProducer].
 //
 // When a message is received, turns on the LED, and starts a timer to turn it
 // off again.
@@ -48,7 +49,7 @@ main() {
   // Start the delays with the longest first to test that they are triggered
   // in opposite order.
   for (int i = 0; i < count; i++) {
-    Channel channel = sleep((count - i) * 500);
+    Channel channel = sleep((count - i) * 1000);
     var localI = i;
     Fiber fiber = Fiber.fork(() {
       print("Timer $localI waiting");

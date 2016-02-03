@@ -16,6 +16,8 @@
 
 #include "src/shared/platform.h"
 
+#include "device_manager.h"
+
 // Interface to the universal asynchronous receiver/transmitter (UART).
 class Uart {
  public:

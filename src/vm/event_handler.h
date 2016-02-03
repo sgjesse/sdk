@@ -36,14 +36,18 @@ class EventHandler {
 
   Monitor* monitor() const { return monitor_; }
 
+  PriorityHeapWithValueIndex<int64, Port*> *timeouts() {
+    return &(timeouts_);
+  }
+
  private:
   Monitor* monitor_;
   void* data_;
   intptr_t id_;
   bool running_;
   ThreadIdentifier thread_;
-
   PriorityHeapWithValueIndex<int64, Port*> timeouts_;
+
   int64 next_timeout_;
 
   static void* RunEventHandler(void* peer);

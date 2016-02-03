@@ -18,6 +18,10 @@
 #include "src/vm/vector.h"
 #include "src/shared/globals.h"
 
+#include <stdarg.h>
+
+void flog(const char* format, ...);
+
 #ifdef DEBUG
 #define LOG_STATUS_MESSAGE                                                   \
       char const *msg;                                                       \
@@ -78,69 +82,8 @@
 
 namespace fletch {
 
-class Port;
-
 static const int kMutexSize = sizeof(int32_t) * 3;
 static const int kSemaphoreSize = sizeof(int32_t) * 2;
-
-osMailQId GetFletchMailQ();
-
-struct CmsisMessage {
-  uint32_t handle;
-};
-
-struct Device {
- public:
-  Device(Port *port, uint32_t flags, uint32_t mask, void* data)
-    : port(port), mask(mask), data(data) {
-    this->flags.store(flags);
-  }
-
-  // The port waiting for messages on this device
-  Port *port;
-
-  // The current flags for this device.
-  fletch::Atomic<uint32_t> flags;
-
-  // The mask for messages on this device.
-  uint32_t mask;
-
-  // Data associated with the device.
-  void *data;
-
-  // Sets the [flag] in [flags]. Returns true if anything changed.
-  bool AddFlag(uint32_t flag) {
-    uint32_t flags = this->flags;
-    if ((flags & flag) != 0) return false;
-    bool success = false;
-    while (!success) {
-      uint32_t new_flags = flags | flag;
-      success = this->flags.compare_exchange_weak(flags, new_flags);
-    }
-    return true;
-  }
-
-  // Disables the [flag]  in [flags]. Returns true if anything changed.
-  bool RemoveFlag(uint32_t flag) {
-    uint32_t flags = this->flags;
-    if ((flags & flag) == 0) return false;
-    bool success = false;
-    while (!success) {
-      uint32_t new_flags = flags & ~flag;
-      success = this->flags.compare_exchange_weak(flags, new_flags);
-    }
-    return true;
-  }
-};
-
-Device *GetDevice(int handle);
-
-// Send a message to the event handler, that an event has happened on
-// [handle].
-int SendMessageCmsis(uint32_t handle);
-
-// Installs [device] so it can be listened to by the event handler.
-int InstallDevice(Device *device);
 
 // Forward declare [Platform::GetMicroseconds].
 namespace Platform {

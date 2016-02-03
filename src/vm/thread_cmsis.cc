@@ -56,7 +56,7 @@ ThreadIdentifier Thread::Run(RunSignature run, void* data) {
   ASSERT(thread_no < kNumberOfFletchThreads);
   osThreadDef_t* threadDef = &(cmsis_thread_pool[thread_no]);
   threadDef->pthread = reinterpret_cast<void (*)(const void*)>(run);
-  threadDef->tpriority = osPriorityNormal;
+  threadDef->tpriority = osPriorityHigh;
   threadDef->stacksize = kFletchStackSize;
   threadDef->name = const_cast<char*>(name);
 #ifdef CMSIS_OS_RTX

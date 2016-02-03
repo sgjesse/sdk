@@ -6,11 +6,14 @@
 
 #include <cmsis_os.h>
 
+// TODO(sigurdm): The cmsis event-handler should not know about the
+// disco-platform
+#include "platforms/stm/disco_fletch/src/device_manager.h"
+
 #include "src/vm/event_handler.h"
 #include "src/vm/object.h"
 #include "src/vm/port.h"
 #include "src/vm/process.h"
-#include "src/shared/platform.h"
 
 namespace fletch {
 
@@ -24,16 +27,22 @@ const int kInterruptHandle = -1;
 // initialized.
 class Data {};
 
+DeviceManager *DeviceManager::instance_;
+
 void EventHandler::Create() {
   data_ = reinterpret_cast<void*>(new Data());
 }
 
+int interrupt_count = 0;
+
 void EventHandler::Interrupt() {
-  SendMessageCmsis(kInterruptHandle);
+// if (
+ DeviceManager::GetDeviceManager()->SendMessage(kInterruptHandle);
+  // != osOK) FATAL("Did not send");
+ // interrupt_count++;
 }
 
-Object* EventHandler::Add(Process* process, Object* id, Port* port,
-                          int flags) {
+Object* EventHandler::Add(Process* process, Object* id, Port* port, int flags) {
   if (!id->IsSmi()) return Failure::wrong_argument_type();
 
   EnsureInitialized();
@@ -42,7 +51,7 @@ Object* EventHandler::Add(Process* process, Object* id, Port* port,
 
   ScopedMonitorLock locker(monitor_);
 
-  Device *device = GetDevice(handle);
+  Device *device = DeviceManager::GetDeviceManager()->GetDevice(handle);
   Port *existing = device->port;
 
   if (existing != NULL) FATAL("Already listening to device");
@@ -60,14 +69,20 @@ Object* EventHandler::Add(Process* process, Object* id, Port* port,
   return process->program()->null_object();
 }
 
+int64 next_timeout;
+
+int ll = 0;
+int64 next_timeouts[40] = {};
+
 void EventHandler::Run() {
-  osMailQId queue = GetFletchMailQ();
+  osMessageQId queue = DeviceManager::GetDeviceManager()->GetMailQueue();
+
   while (true) {
-    int64 next_timeout;
     {
       ScopedMonitorLock locker(monitor_);
       next_timeout = next_timeout_;
     }
+
 
     if (next_timeout == INT64_MAX) {
       next_timeout = -1;
@@ -76,7 +91,9 @@ void EventHandler::Run() {
       if (next_timeout < 0) next_timeout = 0;
     }
 
-    osEvent event = osMailGet(queue, next_timeout);
+    next_timeouts[ll++] = next_timeout;
+
+    osEvent event = osMessageGet(queue, (int)next_timeout);
     HandleTimeouts();
 
     {
@@ -89,12 +106,10 @@ void EventHandler::Run() {
       }
     }
 
-    if (event.status == osEventMail) {
-      CmsisMessage *message = reinterpret_cast<CmsisMessage*>(event.value.p);
-
-      int handle = message->handle;
+    if (event.status == osEventMessage ) {
+      int handle = static_cast<int>(event.value.v);
       if (handle != kInterruptHandle) {
-        Device *device = GetDevice(handle);
+        Device *device = DeviceManager::GetDeviceManager()->GetDevice(handle);
         Port *port = device->port;
         int device_flags = device->flags;
         if (port == NULL || ((device->mask & device_flags) == 0)) {
@@ -104,7 +119,6 @@ void EventHandler::Run() {
           Send(port, device_flags, true);
         }
       }
-      osMailFree(queue, reinterpret_cast<void*>(message));
     }
   }
 }

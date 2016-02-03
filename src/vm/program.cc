@@ -128,7 +128,6 @@ Process* Program::ProcessSpawnForMain() {
   stack->set(--top, reinterpret_cast<Object*>(InterpreterEntry));
   stack->set(--top, reinterpret_cast<Object*>(frame_pointer));
   stack->set_top(top);
-
   return process;
 }
 

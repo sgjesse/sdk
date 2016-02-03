@@ -16,45 +16,21 @@
 
 #include "src/shared/utils.h"
 
+char logdata[2000];
+
+void flog(const char* format, ...) {
+  va_list args;
+  va_start (args, format);
+  vsprintf(logdata, format, args);
+  va_end (args);
+}
+
 namespace fletch {
-
-osMailQId fletchMailQ;
-
-osMailQId GetFletchMailQ() {
-  return fletchMailQ;
-}
-
-// All open devices are stored here.
-Vector<Device*> devices;
-
-int InstallDevice(Device *device) {
-  devices.PushBack(device);
-  return devices.size() - 1;
-}
-
-Device *GetDevice(int handle) {
-  return devices[handle];
-}
-
-// Sends a message on the fletch osMailQ used by the event handler.
-int SendMessageCmsis(uint32_t handle) {
-  CmsisMessage *cmsisMessage =
-      reinterpret_cast<CmsisMessage*>(osMailAlloc(fletchMailQ, 0));
-  cmsisMessage->handle = handle;
-  int r = osMailPut(GetFletchMailQ(), reinterpret_cast<void*>(cmsisMessage));
-  return r;
-}
 
 static uint64 time_launch;
 
-// The size of the queue used by the event handler.
-const uint32_t kMailQSize = 50;
-
 void Platform::Setup() {
   time_launch = GetMicroseconds();
-  osMailQDef(fletch_queue, kMailQSize, CmsisMessage);
-  fletchMailQ = osMailCreate(osMailQ(fletch_queue), NULL);
-  devices = Vector<Device*>();
 }
 
 void Platform::TearDown() { }

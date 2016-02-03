@@ -55,6 +55,9 @@ void EventHandler::ReceiverForPortsDied(Port* ports) {
   }
 }
 
+int tt = 0;
+int64 times[0] = {};
+
 void* EventHandler::RunEventHandler(void* peer) {
   EventHandler* event_handler = reinterpret_cast<EventHandler*>(peer);
   event_handler->Run();
@@ -78,6 +81,8 @@ void EventHandler::ScheduleTimeout(int64 timeout, Port* port) {
   // Be sure it's running.
   EnsureInitialized();
 
+//  printf("Adding timeout %d %d\n", timeout, port);
+
   ScopedMonitorLock scoped_lock(monitor_);
 
   if (timeout == -1) {
@@ -96,9 +101,13 @@ void EventHandler::ScheduleTimeout(int64 timeout, Port* port) {
 
   next_timeout_ =
       timeouts_.IsEmpty() ? INT64_MAX : timeouts_.Minimum().priority;
+   times[tt++] = next_timeout_;
 
   Interrupt();
 }
+
+int pp = 0;
+int64 pimes[20] = {};
 
 void EventHandler::HandleTimeouts() {
   // Check timeouts.
@@ -110,7 +119,10 @@ void EventHandler::HandleTimeouts() {
   int64 next_timeout = INT64_MAX;
   while (!timeouts_.IsEmpty()) {
     auto minimum = timeouts_.Minimum();
-    if (minimum.priority <= current_time) {
+    int64 p = minimum.priority;
+      pimes[pp++] = p;
+      pimes[pp++] = current_time;
+    if (p <= current_time) {
       Send(minimum.value, 0, true);
       timeouts_.RemoveMinimum();
     } else {

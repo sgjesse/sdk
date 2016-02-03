@@ -24,38 +24,87 @@ extern unsigned char _binary_event_handler_test_snapshot_size;
 
 extern PageAllocator* page_allocator;
 
+///* The fault handler implementation calls a function called
+//prvGetRegistersFromStack(). */
+//extern "C" void HardFault_Handler(void)
+//{
+//    __asm volatile
+//    (
+//        " tst lr, #4                                                \n"
+//        " ite eq                                                    \n"
+//        " mrseq r0, msp                                             \n"
+//        " mrsne r0, psp                                             \n"
+//        " ldr r1, [r0, #24]                                         \n"
+//        " ldr r2, handler2_address_const                            \n"
+//        " bx r2                                                     \n"
+//        " handler2_address_const: .word prvGetRegistersFromStack    \n"
+//    );
+//}
+//
+///* These are volatile to try and prevent the compiler/linker optimising them
+//away as the variables never actually get used.  If the debugger won't show the
+//values of the variables, make them global my moving their declaration outside
+//of this function. */
+//volatile uint32_t r0;
+//volatile uint32_t r1;
+//volatile uint32_t r2;
+//volatile uint32_t r3;
+//volatile uint32_t r12;
+//volatile uint32_t lr; /* Link register. */
+//volatile uint32_t pc; /* Program counter. */
+//volatile uint32_t psr;/* Program status register. */
+//extern "C" void prvGetRegistersFromStack( uint32_t *pulFaultStackAddress )
+//{
+//
+//    r0 = pulFaultStackAddress[ 0 ];
+//    r1 = pulFaultStackAddress[ 1 ];
+//    r2 = pulFaultStackAddress[ 2 ];
+//    r3 = pulFaultStackAddress[ 3 ];
+//
+//    r12 = pulFaultStackAddress[ 4 ];
+//    lr = pulFaultStackAddress[ 5 ];
+//    pc = pulFaultStackAddress[ 6 ];
+//    psr = pulFaultStackAddress[ 7 ];
+//
+//    /* When the following line is hit, the variables contain the register values. */
+//    for( ;; );
+//}
+
 // `MessageQueueProducer` will send a message every `kMessageFrequency`
 // millisecond.
 const int kMessageFrequency = 400;
 
 // Sends a message on a port_id with a fixed interval.
-static void MessageQueueProducer(const void *argument) {
-  int handle = reinterpret_cast<int>(argument);
-  fletch::Device *device = fletch::GetDevice(handle);
-  uint16_t counter = 0;
-  for (;;) {
-    counter++;
-    device->AddFlag(1);
-    int status = fletch::SendMessageCmsis(handle);
-    if (status != osOK) {
-      LOG_DEBUG("Error Sending %d\n", status);
-    }
-    osDelay(kMessageFrequency);
-  }
-}
+//static void MessageQueueProducer(const void *argument) {
+////  int handle = reinterpret_cast<int>(argument);
+////  fletch::Device *device =
+////      fletch::DeviceManager::GetDeviceManager()->GetDevice(handle);
+////  uint16_t counter = 0;
+////  for (;;) {
+////    counter++;
+////    device->AddFlag(1);
+////    int status = fletch::DeviceManager::GetDeviceManager()->SendMessage(handle);
+////    if (status != osOK) {
+////      LOG_DEBUG("Error Sending %d\n", status);
+////    }
+////    osDelay(kMessageFrequency);
+////  }
+//  for (;;) {}
+//}
 
 void NotifyRead(int handle) {
-  fletch::Device *device = fletch::GetDevice(handle);
+  fletch::Device *device =
+      fletch::DeviceManager::GetDeviceManager()->GetDevice(handle);
   device->RemoveFlag(1);
 }
 
 int InitializeProducer() {
   fletch::Device *device = new fletch::Device(NULL, 0, 0, NULL);
 
-  int handle = fletch::InstallDevice(device);
+  int handle = fletch::DeviceManager::GetDeviceManager()->InstallDevice(device);
 
-  osThreadDef(PRODUCER, MessageQueueProducer, osPriorityNormal, 0, 2 * 1024);
-  osThreadCreate(osThread(PRODUCER), reinterpret_cast<void*>(handle));
+//  osThreadDef(PRODUCER, MessageQueueProducer, osPriorityNormal, 0, 2 * 1024);
+//  osThreadCreate(osThread(PRODUCER), reinterpret_cast<void*>(handle));
 
   return handle;
 }

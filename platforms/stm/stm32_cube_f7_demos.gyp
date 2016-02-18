@@ -1,10 +1,19 @@
 # Copyright (c) 2015, the Dartino project authors. Please see the AUTHORS file
 # for details. All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE.md file.
-
 {
   'variables': {
     'discovery_projects': '<(stm32_cube_f7)/Projects/STM32746G-Discovery',
+    'additional_gcc_warning_flags' : [
+      '-Wno-empty-body',
+      '-Wno-missing-field-initializers',
+      '-Wno-sign-compare',
+    ],
+    'lwip_gcc_warning_flags' : [
+      '-Wno-format',
+      '-Wno-address',
+      '-Wno-pointer-sign',
+    ],
   },
   'target_defaults': {
     'include_dirs': [
@@ -73,6 +82,9 @@
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],
@@ -156,6 +168,9 @@
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],
@@ -243,6 +258,9 @@
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],
@@ -358,6 +376,9 @@
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],
@@ -412,9 +433,7 @@
         ],
       },
       'cflags' : [
-        '-Wno-format',
-        '-Wno-address',
-        '-Wno-pointer-sign',
+        '<@(lwip_gcc_warning_flags)'
       ],
       'type': 'executable',
       'includes': [
@@ -456,6 +475,10 @@
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+              '<@(lwip_gcc_warning_flags)'
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],
@@ -525,9 +548,7 @@
         'USE_STM32746G_DISCO',
       ],
       'cflags' : [
-        '-Wno-format',
-        '-Wno-address',
-        '-Wno-pointer-sign',
+        '<@(lwip_gcc_warning_flags)'
       ],
       'include_dirs': [
         '<(project_path)/Core/Inc',
@@ -601,6 +622,10 @@
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+              '<@(lwip_gcc_warning_flags)'
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],

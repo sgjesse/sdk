@@ -64,6 +64,7 @@
             '<(PRODUCT_DIR)/program.S',
           ],
           'action': [
+<<<<<<< HEAD
             '<(PRODUCT_DIR)/../ReleaseIA32/dartino-flashify',
             '<(PRODUCT_DIR)/snapshot',
             '<(PRODUCT_DIR)/program.S',
@@ -95,6 +96,24 @@
             '<(PRODUCT_DIR)/program.o',
             '-c',
             '<(PRODUCT_DIR)/program.S',
+=======
+            'python',
+            '../../../tools/run_with_cwd.py',
+            '<(PRODUCT_DIR)',
+            # As we are messing with CWD we need the path relative to
+            # PRODUCT_DIR (where we cd into) instead of relative to
+            # where this .gyp file is.
+            '../../third_party/gcc-arm-embedded/mac/'
+                'gcc-arm-embedded/bin/arm-none-eabi-objcopy',
+            '-I',
+            'binary',
+            '-O',
+            'elf32-littlearm',
+            '-B',
+            'arm',
+            'snapshot',
+            'snapshot.o',
+>>>>>>> 7dfb236... More hacks to cc/cxx wrappers
           ],
         },
       ],

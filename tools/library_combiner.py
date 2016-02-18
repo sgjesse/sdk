@@ -8,6 +8,16 @@ import os
 import sys
 import utils
 
+def invoke_embedded_ar(args):
+  library_name = args[len(args) - 1]
+  libraries = args[:-1]
+  script = 'CREATE %s\n' % library_name
+  for lib in libraries:
+    script += 'ADDLIB %s\n' % lib
+  script += 'SAVE\n'
+  script += 'END\n'
+  os.system('env echo "%s" | /Users/sgjesse/prj/dart/github/dartino/sdk/third_party/gcc-arm-embedded/mac/gcc-arm-embedded/bin/arm-none-eabi-ar -M' % script)
+
 def invoke_ar(args):
   library_name = args[len(args) - 1]
   libraries = args[:-1]
@@ -37,7 +47,9 @@ def invoke_lib_exe(args):
 def main():
   args = sys.argv[1:]
   os_name = utils.GuessOS()
-  if os_name == 'linux':
+  if os.getenv('CONFIGURATION').endswith('STM') or os.getenv('CONFIGURATION').endswith('CM4') or os.getenv('CONFIGURATION').endswith('CM4SF'):
+    invoke_embedded_ar(args)
+  elif os_name == 'linux':
     invoke_ar(args)
   elif os_name == 'macos':
     invoke_libtool(args)

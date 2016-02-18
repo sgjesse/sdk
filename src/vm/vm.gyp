@@ -289,6 +289,7 @@
         'assembler_arm.cc',
         'assembler_arm.h',
         'assembler_arm_thumb_linux.cc',
+        'assembler_arm_thumb_macos.cc',
         'assembler_arm_linux.cc',
         'assembler_arm_macos.cc',
         'assembler.h',

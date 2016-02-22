@@ -5,20 +5,20 @@
 {
   'target_defaults': {
     'include_dirs': [
-      '<(stm32_cube_f7)/Drivers/CMSIS/Include/',
-      '<(stm32_cube_f7)/Drivers/CMSIS/Device/ST/STM32F7xx/Include/',
-      '<(stm32_cube_f7)/Drivers/BSP/STM32746G-Discovery/',
-      '<(stm32_cube_f7)/Drivers/BSP/Components/Common/',
-      '<(stm32_cube_f7)/Middlewares/ST/STemWin/Config/',
-      '<(stm32_cube_f7)/Middlewares/ST/STemWin/inc/',
-      '<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc/',
-      '<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/',
-      '<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/',
-      '<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/',
-      '<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/drivers/',
-      '<(stm32_cube_f7)/Utilities/Log',
-      '<(stm32_cube_f7)/Utilities/Fonts',
-      '<(stm32_cube_f7)/Utilities/CPU',
+      #'<(stm32_cube_f7)/Drivers/CMSIS/Include/',
+      #'<(stm32_cube_f7)/Drivers/CMSIS/Device/ST/STM32F7xx/Include/',
+      #'<(stm32_cube_f7)/Drivers/BSP/STM32746G-Discovery/',
+      #'<(stm32_cube_f7)/Drivers/BSP/Components/Common/',
+      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/Config/',
+      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/inc/',
+      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc/',
+      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/',
+      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/',
+      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/',
+      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/drivers/',
+      #'<(stm32_cube_f7)/Utilities/Log',
+      #'<(stm32_cube_f7)/Utilities/Fonts',
+      #'<(stm32_cube_f7)/Utilities/CPU',
     ],
   },
   'targets': [
@@ -153,23 +153,23 @@
 
         # Generated files.
         '<(generated_path)/Inc/mxconstants.h',
-        '<(generated_path)/Inc/stm32f7xx_hal_conf.h',
-        '<(generated_path)/Inc/stm32f7xx_it.h',
+        #'<(generated_path)/Inc/stm32f7xx_hal_conf.h',
+        #'<(generated_path)/Inc/stm32f7xx_it.h',
         '<(generated_path)/Src/mx_init.c',  # Derived from generated main.c.
-        '<(generated_path)/Src/stm32f7xx_hal_msp.c',
-        '<(generated_path)/Src/stm32f7xx_it.c',
+        #'<(generated_path)/Src/stm32f7xx_hal_msp.c',
+        #'<(generated_path)/Src/stm32f7xx_it.c',
 
         # Board initialization and interrupt service routines (template files).
-        '<(template_path)/system_stm32f7xx.c',
-        '<(template_path)/startup_stm32f746xx.s',
+        #'<(template_path)/system_stm32f7xx.c',
+        #'<(template_path)/startup_stm32f746xx.s',
 
        # Board support packages.
-        '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery.c',
-        '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery_lcd.c',
-        '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery_sdram.c',
+       # '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery.c',
+       # '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery_lcd.c',
+       # '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery_sdram.c',
 
         # Additional utilities.
-        '<(stm32_cube_f7)/Utilities/Log/lcd_log.c',
+        #'<(stm32_cube_f7)/Utilities/Log/lcd_log.c',
       ],
       'conditions': [
         ['OS=="mac"', {
@@ -206,8 +206,8 @@
           # TODO(340): Why does this not work???
           #'-T<(generated_path)/SW4STM32/configuration/STM32F746NGHx_FLASH.ld',
           # TODO(340): Why is this needed???
-          '-T../../platforms/stm/disco_dartino/generated/SW4STM32/'
-            'configuration/STM32F746NGHx_FLASH.ld',
+          #'-T../../platforms/stm/disco_dartino/generated/SW4STM32/'
+          #  'configuration/STM32F746NGHx_FLASH.ld',
           '-Wl,--wrap=__libc_init_array',
           '-Wl,--wrap=_malloc_r',
           '-Wl,--wrap=_malloc_r',

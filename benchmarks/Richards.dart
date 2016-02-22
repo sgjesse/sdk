@@ -37,10 +37,16 @@
 import "BenchmarkBase.dart";
 
 
-main() {
+main1() {
   new Richards().report();
 }
 
+main() {
+  var r = new Richards();
+  for (int i = 0; i < 100; i++) {
+    r.run();
+  }
+}
 
 /**
  * Richards imulates the task dispatcher of an operating system.

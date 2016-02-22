@@ -78,22 +78,23 @@ int DebugInfo::NextBreakpointId() {
 }
 
 const Breakpoint* DebugInfo::LookupBreakpointByBCP(uint8_t* bcp) {
-  Breakpoints::ConstIterator it = program_breakpoints_->Find(bcp);
-  if (it != program_breakpoints_->End()) {
+  // Always hit process-local/one-shot breakpoints first.
+  Breakpoints::ConstIterator it = process_breakpoints_.Find(bcp);
+  if (it != process_breakpoints_.End()) {
     return &it->second;
   }
-  it = process_breakpoints_.Find(bcp);
-  if (it != process_breakpoints_.End()) {
+  it = program_breakpoints_->Find(bcp);
+  if (it != program_breakpoints_->End()) {
     return &it->second;
   }
   return NULL;
 }
 
 const Breakpoint* DebugInfo::LookupBreakpointByOpcode(uint8_t opcode) {
-  for (auto& pair : program_breakpoints_->map()) {
+  for (auto& pair : process_breakpoints_.map()) {
     if (*pair.first == opcode) return &pair.second;
   }
-  for (auto& pair : process_breakpoints_.map()) {
+  for (auto& pair : program_breakpoints_->map()) {
     if (*pair.first == opcode) return &pair.second;
   }
   return NULL;
@@ -122,6 +123,10 @@ uint8_t* DebugInfo::EraseBreakpointById(int id) {
 }
 
 bool DebugInfo::ShouldBreak(uint8_t* bcp, Object** sp) {
+  if (is_stepping_) {
+    SetCurrentBreakpoint(kNoBreakpointId);
+    return true;
+  }
   const Breakpoint* breakpoint = LookupBreakpointByBCP(bcp);
   if (breakpoint != NULL) {
     Stack* breakpoint_stack = breakpoint->stack();
@@ -135,10 +140,6 @@ bool DebugInfo::ShouldBreak(uint8_t* bcp, Object** sp) {
     }
     SetCurrentBreakpoint(breakpoint->id());
     if (breakpoint->is_one_shot()) DeleteBreakpoint(breakpoint->id());
-    return true;
-  }
-  if (is_stepping_) {
-    SetCurrentBreakpoint(kNoBreakpointId);
     return true;
   }
   return false;
@@ -167,8 +168,8 @@ int DebugInfo::SetProcessLocalBreakpoint(Function* function, int bytecode_index,
                                          word stack_height) {
   ASSERT(one_shot);
   uint8_t* bcp = function->bytecode_address_for(0) + bytecode_index;
-  const Breakpoint* existing_breakpoint = LookupBreakpointByBCP(bcp);
-  if (existing_breakpoint != NULL) return existing_breakpoint->id();
+  // Assert that a process-local breakpoint does not already exist.
+  ASSERT(process_breakpoints_.Find(bcp) == process_breakpoints_.End());
   {
     ScopedLock lock(breakpoint_mutex);
     Opcode opcode = static_cast<Opcode>(*bcp);
@@ -195,22 +196,30 @@ bool DebugInfo::DeleteBreakpoint(int id) {
   return false;
 }
 
+// SetStepping ensures that all bytecodes will trigger and updates the state to
+// be on a breakpoint. This ensures that resuming will not break on the first
+// executed bytecode since it was already at that breakpoint.
 void DebugInfo::SetStepping() {
-  if (is_stepping_) return;
+  ASSERT(!is_stepping_);
+  if (is_at_breakpoint_) ClearCurrentBreakpoint();
   is_stepping_ = true;
+  SetCurrentBreakpoint(kNoBreakpointId);
   ScopedLock lock(breakpoint_mutex);
   for (int i = 0; i < Bytecode::kNumBytecodes; i++) {
     SetBytecodeBreak(static_cast<Opcode>(i));
   }
 }
 
+// Converse to SetStepping, ClearStepping restores bytecode breaks for the
+// actual breakpoints and clears the current breakpoint. This can only be called
+// when the state was actually stepping and the current breakpoint is a cause of
+// stepping.
 void DebugInfo::ClearStepping() {
+  ASSERT(is_stepping_);
+  ASSERT(is_at_breakpoint_);
+  ASSERT(current_breakpoint_id_ == kNoBreakpointId);
   is_stepping_ = false;
-}
-
-void DebugInfo::ClearBreakpoint() {
   ClearCurrentBreakpoint();
-  if (is_stepping_) return;
   ClearBytecodeBreaks();
   program_breakpoints_->SetBytecodeBreaks();
   process_breakpoints_.SetBytecodeBreaks();

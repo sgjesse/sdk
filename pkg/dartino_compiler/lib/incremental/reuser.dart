@@ -137,8 +137,13 @@ abstract class Reuser {
   final Map<LibraryElementX, SourceFile> _entrySourceFiles =
       <LibraryElementX, SourceFile>{};
 
-  final Map<LibraryElement, Future<LibraryElement>> _cachedLibraryCopies =
+  final Map<LibraryElement, Future<LibraryElement>> _cachedLibraryCopyFutures =
       <LibraryElement, Future<LibraryElement>>{};
+
+  final Map<LibraryElement, LibraryElement> _cachedLibraryCopies =
+      <LibraryElement, LibraryElement>{};
+
+  final Set<LibraryElement> _synthesizedLibraries = new Set<LibraryElement>();
 
   Reuser(
       this.compiler,
@@ -332,22 +337,43 @@ abstract class Reuser {
       }
     }
 
+    // Record that this library is synthetic.
+    _synthesizedLibraries.add(newLibrary);
+
     return newLibrary;
+  }
+
+  /// Returns true if [library] is synthetic, that is, created with
+  /// [_synthesizeLibrary] above.
+  bool isSynthetic(LibraryElement library) {
+    return _synthesizedLibraries.contains(library);
   }
 
   /// Returns a copy of [library] if any of its parts have changed, whose token
   /// positions represent the changed positions.  If [library] hasn't changed,
   /// it's returned unmodified.
   Future<LibraryElement> copyLibraryWithChanges(LibraryElement library) {
-    return _cachedLibraryCopies.putIfAbsent(library, () async {
+    return _cachedLibraryCopyFutures.putIfAbsent(library, () async {
       List<Script> scripts = <Script>[];
-      if (!await _computeUpdatedScripts(library, scripts)) return library;
+      if (!await _computeUpdatedScripts(library, scripts)) {
+        _cachedLibraryCopies[library] = library;
+        return library;
+      }
       try {
-        return _synthesizeLibrary(library, scripts);
+        LibraryElement copy = _synthesizeLibrary(library, scripts);
+        _cachedLibraryCopies[library] = copy;
+        return copy;
       } finally {
         _cleanUp(library);
       }
     });
+  }
+
+  /// Same as [copyLibraryWithChanges], but synchronous. Relies on
+  /// [copyLibraryWithChanges] was called previously.
+  LibraryElement copyLibraryWithChangesSync(LibraryElement library) {
+    LibraryElement copy = _cachedLibraryCopies[library];
+    return copy == null ? library : copy;
   }
 
   bool cannotReuse(context, String message) {
@@ -705,7 +731,7 @@ abstract class Reuser {
     if (!before.isInstanceMember) {
       if (!allowNonInstanceMemberModified(after)) return false;
     }
-    updates.add(new FunctionUpdate(compiler, before, after));
+    addFunctionUpdate(compiler, before, after);
     return true;
   }
 
@@ -797,6 +823,11 @@ abstract class Reuser {
       PartialClassElement before,
       PartialClassElement after);
 
+  void addFunctionUpdate(
+      Compiler compiler,
+      PartialFunctionElement before,
+      PartialFunctionElement after);
+
   void addAddedFunctionUpdate(
       Compiler compiler,
       PartialFunctionElement element,
@@ -862,7 +893,7 @@ abstract class Update {
 }
 
 /// Represents an update of a function element.
-class FunctionUpdate extends Update with ReuseFunctionElement {
+abstract class FunctionUpdate extends Update with ReuseFunctionElement {
   final PartialFunctionElement before;
 
   final PartialFunctionElement after;

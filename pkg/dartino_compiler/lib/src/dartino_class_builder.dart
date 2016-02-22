@@ -37,7 +37,7 @@ abstract class DartinoClassBuilder extends DartinoClassBase {
       int fieldCount)
       : super(classId, name, element, fieldCount);
 
-  DartinoClassBuilder get superclass;
+  DartinoClassBase get superclass;
   int get superclassId => hasSuperClass ? superclass.classId : -1;
 
   /**
@@ -88,7 +88,7 @@ void forEachField(ClassElement c, void action(FieldElement field)) {
 }
 
 class DartinoNewClassBuilder extends DartinoClassBuilder {
-  final DartinoClassBuilder superclass;
+  final DartinoClassBase superclass;
   final bool isBuiltin;
 
   // The extra fields are synthetic fields not represented in any Dart source
@@ -103,7 +103,7 @@ class DartinoNewClassBuilder extends DartinoClassBuilder {
   DartinoNewClassBuilder(
       int classId,
       ClassElement element,
-      DartinoClassBuilder superclass,
+      DartinoClassBase superclass,
       this.isBuiltin,
       int extraFields)
       : superclass = superclass,
@@ -113,7 +113,7 @@ class DartinoNewClassBuilder extends DartinoClassBuilder {
 
   static int computeFields(
       ClassElement element,
-      DartinoClassBuilder superclass,
+      DartinoClassBase superclass,
       int extraFields) {
     int count = extraFields;
     if (superclass != null) {
@@ -168,7 +168,7 @@ class DartinoNewClassBuilder extends DartinoClassBuilder {
       _implicitAccessorTable[getterSelector] = backend.makeGetter(fieldIndex);
 
       if (!field.isFinal) {
-        var setter = new Selector.setter(new Name(field.name, field.library));
+        var setter = new Selector.setter(field.memberName);
         var setterSelector = backend.context.toDartinoSelector(setter);
         _implicitAccessorTable[setterSelector] = backend.makeSetter(fieldIndex);
       }
@@ -230,7 +230,7 @@ class DartinoNewClassBuilder extends DartinoClassBuilder {
 class DartinoPatchClassBuilder extends DartinoClassBuilder {
   final DartinoClass klass;
 
-  final DartinoClassBuilder superclass;
+  final DartinoClassBase superclass;
 
   final Map<int, int> _implicitAccessorTable = <int, int>{};
 
@@ -288,12 +288,12 @@ class DartinoPatchClassBuilder extends DartinoClassBuilder {
     // CodegenEnqueuer.
     int fieldIndex = superclassFields + extraFields;
     element.implementation.forEachInstanceField((enclosing, field) {
-      var getter = new Selector.getter(new Name(field.name, field.library));
+      var getter = new Selector.getter(field.memberName);
       int getterSelector = backend.context.toDartinoSelector(getter);
       _implicitAccessorTable[getterSelector] = backend.makeGetter(fieldIndex);
 
       if (!field.isFinal) {
-        var setter = new Selector.setter(new Name(field.name, field.library));
+        var setter = new Selector.setter(field.memberName);
         var setterSelector = backend.context.toDartinoSelector(setter);
         _implicitAccessorTable[setterSelector] = backend.makeSetter(fieldIndex);
       }
@@ -303,13 +303,13 @@ class DartinoPatchClassBuilder extends DartinoClassBuilder {
 
     for (FieldElement field in _removedFields) {
       Selector getter =
-          new Selector.getter(new Name(field.name, field.library));
+          new Selector.getter(field.memberName);
       int getterSelector = backend.context.toDartinoSelector(getter);
       _removedAccessors.add(getterSelector);
 
       if (!field.isFinal) {
         Selector setter =
-            new Selector.setter(new Name(field.name, field.library));
+            new Selector.setter(field.memberName);
         int setterSelector = backend.context.toDartinoSelector(setter);
         _removedAccessors.add(setterSelector);
       }

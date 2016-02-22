@@ -355,7 +355,7 @@ class DartinoSystemBuilder {
 
   DartinoClassBuilder newClassBuilderInternal(
       DartinoClass klass,
-      DartinoClassBuilder superclass,
+      DartinoClassBase superclass,
       SchemaChange schemaChange) {
     DartinoClassBuilder builder =
         new DartinoPatchClassBuilder(klass, superclass, schemaChange);
@@ -364,17 +364,26 @@ class DartinoSystemBuilder {
     return builder;
   }
 
+  DartinoClassBuilder newPatchClassBuilderFromBase(
+      DartinoClassBase base,
+      SchemaChange schemaChange) {
+    DartinoClass klass = predecessorSystem.lookupClassById(base.classId);
+    DartinoClass superclass =
+        predecessorSystem.lookupClassById(base.superclassId);
+    return newClassBuilderInternal(klass, superclass, schemaChange);
+  }
+
   DartinoClassBuilder newPatchClassBuilder(
       int classId,
-      DartinoClassBuilder superclass,
+      DartinoClassBase superclass,
       SchemaChange schemaChange) {
-    DartinoClass klass = lookupClass(classId);
+    DartinoClass klass = predecessorSystem.lookupClassById(classId);
     return newClassBuilderInternal(klass, superclass, schemaChange);
   }
 
   DartinoClassBuilder newClassBuilder(
       ClassElement element,
-      DartinoClassBuilder superclass,
+      DartinoClassBase superclass,
       bool isBuiltin,
       SchemaChange schemaChange,
       {int extraFields: 0}) {
@@ -463,7 +472,7 @@ class DartinoSystemBuilder {
   DartinoFunctionBuilder getClosureFunctionBuilder(
       FunctionElement function,
       ClosureInfo info,
-      DartinoClassBuilder superclass,
+      DartinoClassBase superclass,
       DartinoBackend backend) {
     DartinoFunctionBuilder closure = lookupFunctionBuilderByElement(function);
     if (closure != null) return closure;
@@ -637,7 +646,7 @@ class DartinoSystemBuilder {
         DartinoClassBuilder classBuilder =
             _classBuildersByElement[classElement];
 
-        void addIfField(MemberElement member) {
+        void addIfInstanceField(MemberElement member) {
           if (!member.isField || member.isStatic || member.isPatch) return;
           FieldElement fieldElement = member;
           ConstantValue fieldValue = value.fields[fieldElement];
@@ -652,9 +661,9 @@ class DartinoSystemBuilder {
           if (currentClass.superclass != null) {
             addFields(currentClass.superclass);
           }
-          currentClass.forEachLocalMember(addIfField);
+          currentClass.forEachLocalMember(addIfInstanceField);
           if (currentClass.isPatched) {
-            currentClass.patch.forEachLocalMember(addIfField);
+            currentClass.patch.forEachLocalMember(addIfInstanceField);
           }
         }
 

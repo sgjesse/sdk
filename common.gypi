@@ -663,13 +663,13 @@
         ],
       },
 
-      'dartino_cortex_m4_softfp': {
+      'dartino_cortex_m3': {
         'abstract': 1,
 
         'variables': {
           'common_cflags_ldflags': [
-            '-mcpu=cortex-m4',
-            '-mfloat-abi=softfp',
+            '-mcpu=cortex-m3',
+            '-mfloat-abi=soft',
           ],
         },
 

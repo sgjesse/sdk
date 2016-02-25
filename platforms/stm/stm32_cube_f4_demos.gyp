@@ -129,7 +129,7 @@
     },
 
     {
-      'target_name': 'nocleo_demonstrations.elf',
+      'target_name': 'nucleo_demonstrations.elf',
       'variables': {
         'project_name': 'Demonstrations',
         'project_path':
@@ -199,9 +199,9 @@
         'project_name': 'Demonstrations',
       },
       'type': 'none',
-      'target_name': 'Demonstrations',
+      'target_name': 'nucleo_Demonstrations',
       'dependencies' : [
-        'Demonstrations.elf'
+        'nucleo_demonstrations.elf'
       ],
       'actions': [
         {

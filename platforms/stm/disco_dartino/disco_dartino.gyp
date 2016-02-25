@@ -5,20 +5,20 @@
 {
   'target_defaults': {
     'include_dirs': [
-      #'<(stm32_cube_f7)/Drivers/CMSIS/Include/',
-      #'<(stm32_cube_f7)/Drivers/CMSIS/Device/ST/STM32F7xx/Include/',
-      #'<(stm32_cube_f7)/Drivers/BSP/STM32746G-Discovery/',
-      #'<(stm32_cube_f7)/Drivers/BSP/Components/Common/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/Config/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/',
-      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/drivers/',
-      #'<(stm32_cube_f7)/Utilities/Log',
-      #'<(stm32_cube_f7)/Utilities/Fonts',
-      #'<(stm32_cube_f7)/Utilities/CPU',
+      '<(stm32_cube_f7)/Drivers/CMSIS/Include/',
+      '<(stm32_cube_f7)/Drivers/CMSIS/Device/ST/STM32F7xx/Include/',
+      '<(stm32_cube_f7)/Drivers/BSP/STM32746G-Discovery/',
+      '<(stm32_cube_f7)/Drivers/BSP/Components/Common/',
+      '<(stm32_cube_f7)/Middlewares/ST/STemWin/Config/',
+      '<(stm32_cube_f7)/Middlewares/ST/STemWin/inc/',
+      '<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc/',
+      '<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/',
+      '<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/',
+      '<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/',
+      '<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/drivers/',
+      '<(stm32_cube_f7)/Utilities/Log',
+      '<(stm32_cube_f7)/Utilities/Fonts',
+      '<(stm32_cube_f7)/Utilities/CPU',
     ],
   },
   'targets': [
@@ -64,7 +64,6 @@
             '<(PRODUCT_DIR)/program.S',
           ],
           'action': [
-<<<<<<< HEAD
             '<(PRODUCT_DIR)/../ReleaseIA32/dartino-flashify',
             '<(PRODUCT_DIR)/snapshot',
             '<(PRODUCT_DIR)/program.S',
@@ -96,24 +95,6 @@
             '<(PRODUCT_DIR)/program.o',
             '-c',
             '<(PRODUCT_DIR)/program.S',
-=======
-            'python',
-            '../../../tools/run_with_cwd.py',
-            '<(PRODUCT_DIR)',
-            # As we are messing with CWD we need the path relative to
-            # PRODUCT_DIR (where we cd into) instead of relative to
-            # where this .gyp file is.
-            '../../third_party/gcc-arm-embedded/mac/'
-                'gcc-arm-embedded/bin/arm-none-eabi-objcopy',
-            '-I',
-            'binary',
-            '-O',
-            'elf32-littlearm',
-            '-B',
-            'arm',
-            'snapshot',
-            'snapshot.o',
->>>>>>> 7dfb236... More hacks to cc/cxx wrappers
           ],
         },
       ],

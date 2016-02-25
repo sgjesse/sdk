@@ -4,23 +4,23 @@
 
 {
   'targets': [
-     #{
-     # 'target_name': 'demos',
-     # 'type': 'none',
-     # 'dependencies': [
-     #   'stm32_cube_f7_demos.gyp:STemWin_HelloWorld',
+     {
+       'target_name': 'demos',
+       'type': 'none',
+       'dependencies': [
+         'stm32_cube_f4_demos.gyp:Demonstrations.elf',
      #   'stm32_cube_f7_demos.gyp:Audio_playback_and_record',
      #   'stm32_cube_f7_demos.gyp:LwIP_HTTP_Server_Netconn_RTOS',
      #   'stm32_cube_f7_demos.gyp:Demonstration',
-     # ],
-    #},
-    {
-      'target_name': 'nucleo_dartino',
-      'type': 'none',
-      'dependencies': [
-        'nucleo_dartino/nucleo_dartino.gyp:nucleo_dartino',
       ],
     },
+    #{
+    #  'target_name': 'nucleo_dartino',
+    #  'type': 'none',
+    #  'dependencies': [
+    #    'nucleo_dartino/nucleo_dartino.gyp:nucleo_dartino',
+    #  ],
+    #},
     #{
     #  'target_name': 'event_handler_test',
     #  'type': 'none',

@@ -21,12 +21,12 @@
         'disco_dartino/disco_dartino.gyp:disco_dartino',
       ],
     },
-    {
-      'target_name': 'event_handler_test',
-      'type': 'none',
-      'dependencies': [
-        'event_handler_test/event_handler_test.gyp:event_handler_test',
-      ],
-    },
+#    {
+#      'target_name': 'event_handler_test',
+#      'type': 'none',
+#      'dependencies': [
+#        'event_handler_test/event_handler_test.gyp:event_handler_test',
+#      ],
+#    },
   ],
 }

@@ -156,15 +156,13 @@ build stm: phony$
     out/ReleaseSTM/build.ninja $
 
 build $
-    out/DebugCM4/build.ninja $
-    out/ReleaseCM4/build.ninja: $
+    out/DebugCM4SF/build.ninja $
+    out/ReleaseCM4SF/build.ninja: $
     gyp-cm4 $
         common.gypi $
         version.gyp $
         platforms/stm/cm4_targets.gypi $
         platforms/stm/cm4.gyp $
-        platforms/stm/disco_dartino/disco_dartino.gyp $
-        platforms/stm/event_handler_test/event_handler_test.gyp $
         dartino.gyp $
         src/double_conversion.gyp $
         src/shared/shared.gyp $
@@ -172,7 +170,7 @@ build $
         src/vm/vm.gyp $
 
 build cm4: phony$
-    out/DebugCM4/build.ninja $
-    out/ReleaseCM4/build.ninja $
+    out/DebugCM4SF/build.ninja $
+    out/ReleaseCM4SF/build.ninja $
 
 default gyp stm

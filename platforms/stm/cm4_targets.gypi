@@ -10,7 +10,7 @@
     'stm32_cube_f4_free_rtos':
       '<(stm32_cube_f4)/Middlewares/Third_Party/FreeRTOS',
     'stm32_cube_f4_bsp_discovery':
-      '<(stm32_cube_f4)/Drivers/BSP/STM32746G-Discovery/',
+      '<(stm32_cube_f4)/Drivers/BSP/STM32F4-Discovery/',
     'stm32_cube_f4_bsp_nucleo':
       '<(stm32_cube_f4)/Drivers/BSP/STM32F4xx-Nucleo/',
 
@@ -25,7 +25,7 @@
 
   'target_defaults': {
     'configurations': {
-      'dartino_stm': {
+      'dartino_xstm': {
         'abstract': 1,
 
         'target_conditions': [
@@ -43,7 +43,7 @@
               '<(stm32_cube_f4_free_rtos)/Source/include/',
               '<(stm32_cube_f4_free_rtos)/Source/portable/GCC/ARM_CM4F/',
               '<(stm32_cube_f4)/Drivers/CMSIS/Include/',
-              'nucleo_dartino/src',
+              #'nucleo_dartino/src',
               '../..'
             ],
           }],
@@ -53,7 +53,7 @@
       'ReleaseCM4': {
         'inherit_from': [
           'dartino_base', 'dartino_debug',
-          'dartino_cortex_m_base', 'dartino_cortex_m4', 'dartino_stm',
+          'dartino_cortex_m_base', 'dartino_cortex_m4', 'dartino_xstm',
           'dartino_disable_live_coding',
           'dartino_disable_native_processes',
         ],
@@ -73,7 +73,7 @@
       'DebugCM4': {
         'inherit_from': [
           'dartino_base', 'dartino_debug',
-          'dartino_cortex_m_base', 'dartino_cortex_m4', 'dartino_stm',
+          'dartino_cortex_m_base', 'dartino_cortex_m4', 'dartino_xstm',
           'dartino_disable_live_coding',
           'dartino_disable_native_processes',
         ],
@@ -82,7 +82,7 @@
       'ReleaseCM4SF': {
         'inherit_from': [
           'dartino_base', 'dartino_debug',
-          'dartino_cortex_m_base', 'dartino_cortex_m4_softfp', 'dartino_stm',
+          'dartino_cortex_m_base', 'dartino_cortex_m3', 'dartino_xstm',
           'dartino_disable_live_coding',
           'dartino_disable_native_processes',
         ],
@@ -102,7 +102,7 @@
       'DebugCM4SF': {
         'inherit_from': [
           'dartino_base', 'dartino_debug',
-          'dartino_cortex_m_base', 'dartino_cortex_m4_softfp', 'dartino_stm',
+          'dartino_cortex_m_base', 'dartino_cortex_m3', 'dartino_xstm',
           'dartino_disable_live_coding',
           'dartino_disable_native_processes',
         ],

@@ -87,7 +87,7 @@
             '<(PRODUCT_DIR)/program.o',
           ],
           'action': [
-            '../../../third_party/gcc-arm-embedded/linux/'
+            '../../../third_party/gcc-arm-embedded/mac/'
                 'gcc-arm-embedded/bin/arm-none-eabi-gcc',
             '-mcpu=cortex-m7',
             '-mthumb',

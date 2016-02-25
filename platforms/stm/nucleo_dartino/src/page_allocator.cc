@@ -2,7 +2,7 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE.md file.
 
-#include "platforms/stm/disco_dartino/src/page_allocator.h"
+#include "platforms/stm/nucleo_dartino/src/page_allocator.h"
 
 #include "src/shared/assert.h"
 

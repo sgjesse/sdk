@@ -142,6 +142,7 @@ build $
         version.gyp $
         platforms/stm/stm_targets.gypi $
         platforms/stm/stm.gyp $
+        platforms/stm/free_rtos_sources.gypi $
         platforms/stm/disco_dartino/disco_dartino.gyp $
         platforms/stm/event_handler_test/event_handler_test.gyp $
         dartino.gyp $
@@ -163,6 +164,9 @@ build $
         version.gyp $
         platforms/stm/cm4_targets.gypi $
         platforms/stm/cm4.gyp $
+        platforms/stm/free_rtos_sources_m4.gypi $
+        platforms/stm/stm32_cube_f4_demos.gyp $
+        platforms/stm/nucleo_dartino/nucleo_dartino.gyp $
         dartino.gyp $
         src/double_conversion.gyp $
         src/shared/shared.gyp $

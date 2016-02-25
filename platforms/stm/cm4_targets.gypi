@@ -34,7 +34,7 @@
               'USE_HAL_DRIVER',
               #'STM32F746xx',
               'STM32F411xE',
-              'USE_STM32F4XX_NUCLEO',
+              #'USE_STM32F4XX_NUCLEO',
             ],
             'include_dirs': [
               # We need to set these here since the src/shared/platform_cmsis.h
@@ -43,7 +43,7 @@
               '<(stm32_cube_f4_free_rtos)/Source/include/',
               '<(stm32_cube_f4_free_rtos)/Source/portable/GCC/ARM_CM4F/',
               '<(stm32_cube_f4)/Drivers/CMSIS/Include/',
-              #'nucleo_dartino/src',
+              'nucleo_dartino/src',
               '../..'
             ],
           }],

@@ -6,30 +6,11 @@
   'variables': {
     'discovery_projects': '<(stm32_cube_f4)/Projects/STM32F4-Discovery',
     'nucleo_projects': '<(stm32_cube_f4)/Projects/STM32F411RE-Nucleo',
-  },
-  'target_defaults': {
-    'include_dirs': [
-      #'<(stm32_cube_f7)/Drivers/CMSIS/Include/',
-      '<(stm32_cube_f4)/Drivers/CMSIS/Device/ST/STM32F4xx/Include/',
-      '<(stm32_cube_f4)/Drivers/BSP/STM32F4-Discovery/',
-      #'<(stm32_cube_f7)/Drivers/BSP/Components/Common/',
-      '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc',
-      '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Class/HID/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/Config/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/',
-      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/drivers/',
-      #'<(stm32_cube_f7)/Utilities/Log',
-      #'<(stm32_cube_f7)/Utilities/Fonts',
-      #'<(stm32_cube_f7)/Utilities/CPU',
-    ],
-    'cflags' : [
+    'additional_gcc_warning_flags' : [
     #  '-Wno-empty-body',
-    #  '-Wno-missing-field-initializers',
+      '-Wno-missing-field-initializers',
       '-Wno-sign-compare',
+      '-Wno-unused-but-set-variable',
     ],
   },
   'targets': [
@@ -52,6 +33,10 @@
         'stm32f4_hal_sources.gypi',
       ],
       'include_dirs': [
+        '<(stm32_cube_f4)/Drivers/CMSIS/Device/ST/STM32F4xx/Include/',
+        '<(stm32_cube_f4)/Drivers/BSP/STM32F4-Discovery/',
+        '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc',
+        '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Class/HID/Inc/',
         '<(project_include_path)',
       ],
       'defines': [
@@ -73,20 +58,21 @@
         # Board support packages.
         '<(stm32_cube_f4_bsp_discovery)/stm32f4_discovery.c',
 
+        # Drivers.
         '<(stm32_cube_f4)/Drivers/BSP/Components/lis302dl/lis302dl.c',
         '<(stm32_cube_f4)/Drivers/BSP/Components/lis3dsh/lis3dsh.c',
         '<(stm32_cube_f4)/Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_accelerometer.c',
-
-        # XXX
         '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_core.c',
         '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c',
         '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ioreq.c',
-
         '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Class/HID/Src/usbd_hid.c',
       ],
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],
@@ -131,9 +117,9 @@
     {
       'target_name': 'nucleo_demonstrations.elf',
       'variables': {
-        'project_name': 'Demonstrations',
+        'project_name': 'nucleo_demonstrations',
         'project_path':
-          '<(nucleo_projects)/<(project_name)',
+          '<(nucleo_projects)/Demonstrations',
         'project_include_path': '<(project_path)/Inc/',
         'project_source_path': '<(project_path)/Src/',
         'ldflags': [
@@ -147,6 +133,11 @@
         'stm32f4_hal_sources.gypi',
       ],
       'include_dirs': [
+        '<(stm32_cube_f4)/Drivers/CMSIS/Device/ST/STM32F4xx/Include/',
+        '<(stm32_cube_f4)/Drivers/BSP/STM32F4xx-Nucleo/',
+        '<(stm32_cube_f4)/Drivers/BSP/Adafruit_Shield/',
+        '<(stm32_cube_f4)/Middlewares/Third_Party/FatFs/src',
+        '<(stm32_cube_f4)/Middlewares/Third_Party/FatFs/src/drivers/',
         '<(project_include_path)',
       ],
       'defines': [
@@ -156,9 +147,7 @@
       'sources': [
         # Application.
         '<(project_source_path)/main.c',
-        '<(project_source_path)/stm32f4xx_hal_msp.c',
-        '<(project_source_path)/usbd_conf.c',
-        '<(project_source_path)/usbd_desc.c',
+        '<(project_source_path)/fatfs_storage.c',
 
         # Board initialization and interrupt service routines.
         '<(project_source_path)/stm32f4xx_it.c',
@@ -166,22 +155,23 @@
         '<(project_path)/SW4STM32/startup_stm32f411xe.s',
 
         # Board support packages.
-        '<(stm32_cube_f4_bsp_discovery)/stm32f4_discovery.c',
+        '<(stm32_cube_f4_bsp_nucleo)/stm32f4xx_nucleo.c',
 
-        '<(stm32_cube_f4)/Drivers/BSP/Components/lis302dl/lis302dl.c',
-        '<(stm32_cube_f4)/Drivers/BSP/Components/lis3dsh/lis3dsh.c',
-        '<(stm32_cube_f4)/Drivers/BSP/STM32F4-Discovery/stm32f4_discovery_accelerometer.c',
-
-        # XXX
-        '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_core.c',
-        '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c',
-        '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ioreq.c',
-
-        '<(stm32_cube_f4)/Middlewares/ST/STM32_USB_Device_Library/Class/HID/Src/usbd_hid.c',
+        # Drivers.
+        '<(stm32_cube_f4)/Drivers/BSP/Components/st7735/st7735.c',
+        '<(stm32_cube_f4)/Drivers/BSP/Adafruit_Shield/stm32_adafruit_lcd.c',
+        '<(stm32_cube_f4)/Drivers/BSP/Adafruit_Shield/stm32_adafruit_sd.c',
+        '<(stm32_cube_f4)/Middlewares/Third_Party/FatFs/src/ff.c',
+        '<(stm32_cube_f4)/Middlewares/Third_Party/FatFs/src/ff_gen_drv.c',
+        '<(stm32_cube_f4)/Middlewares/Third_Party/FatFs/src/diskio.c',
+        '<(stm32_cube_f4)/Middlewares/Third_Party/FatFs/src/drivers/sd_diskio.c',
       ],
       'conditions': [
         ['OS=="mac"', {
           'xcode_settings': {
+            'OTHER_CFLAGS' : [
+              '<@(additional_gcc_warning_flags)',
+            ],
             'OTHER_LDFLAGS': [
               '<@(ldflags)',
             ],
@@ -196,10 +186,10 @@
     },
     {
       'variables': {
-        'project_name': 'Demonstrations',
+        'project_name': 'nucleo_demonstrations',
       },
       'type': 'none',
-      'target_name': 'nucleo_Demonstrations',
+      'target_name': 'nucleo_demonstrations',
       'dependencies' : [
         'nucleo_demonstrations.elf'
       ],

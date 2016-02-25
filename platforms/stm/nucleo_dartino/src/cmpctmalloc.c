@@ -23,7 +23,7 @@
 
 #else  // DARTINO_TARGET_OS_LK
 
-#include "platforms/stm/disco_dartino/src/cmpctmalloc.h"
+#include "platforms/stm/nucleo_dartino/src/cmpctmalloc.h"
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -33,7 +33,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "platforms/stm/disco_dartino/src/globals.h"
+#include "platforms/stm/nucleo_dartino/src/globals.h"
 
 void* page_alloc(size_t pages);
 void page_free(void* start, size_t pages);

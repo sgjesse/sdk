@@ -5,7 +5,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
-#include "platforms/stm/disco_dartino/src/cmpctmalloc.h"
+#include "platforms/stm/nucleo_dartino/src/cmpctmalloc.h"
 #include "src/shared/assert.h"
 
 // Hook called by FreeRTOS when a stack overflow is detected.

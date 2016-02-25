@@ -5,20 +5,7 @@
 {
   'target_defaults': {
     'include_dirs': [
-      #'<(stm32_cube_f7)/Drivers/CMSIS/Include/',
       '<(stm32_cube_f4)/Drivers/CMSIS/Device/ST/STM32F4xx/Include/',
-      #'<(stm32_cube_f7)/Drivers/BSP/STM32746G-Discovery/',
-      #'<(stm32_cube_f7)/Drivers/BSP/Components/Common/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/Config/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STemWin/inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Core/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/ST/STM32_USB_Host_Library/Class/MSC/Inc/',
-      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/',
-      #'<(stm32_cube_f7)/Middlewares/Third_Party/FatFs/src/drivers/',
-      #'<(stm32_cube_f7)/Utilities/Log',
-      #'<(stm32_cube_f7)/Utilities/Fonts',
-      #'<(stm32_cube_f7)/Utilities/CPU',
     ],
   },
   'targets': [
@@ -87,9 +74,11 @@
             '<(PRODUCT_DIR)/program.o',
           ],
           'action': [
-            '../../../third_party/gcc-arm-embedded/linux/'
+            '../../../third_party/gcc-arm-embedded/mac/'
                 'gcc-arm-embedded/bin/arm-none-eabi-gcc',
-            '-mcpu=cortex-m4',
+            #'-mcpu=cortex-m4',
+            '-mcpu=cortex-m3',
+            '-mfloat-abi=soft',
             '-mthumb',
             '-o',
             '<(PRODUCT_DIR)/program.o',
@@ -118,7 +107,7 @@
       'type': 'static_library',
       'standalone_static_library': 1,
       'includes': [
-        '../free_rtos_sources.gypi',
+        '../free_rtos_sources_m4.gypi',
         '../stm32f4_hal_sources.gypi',
       ],
       'defines': [
@@ -165,11 +154,6 @@
 
        # Board support packages.
        # '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery.c',
-       # '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery_lcd.c',
-       # '<(stm32_cube_f7_bsp_discovery)/stm32746g_discovery_sdram.c',
-
-        # Additional utilities.
-        #'<(stm32_cube_f7)/Utilities/Log/lcd_log.c',
       ],
       'conditions': [
         ['OS=="mac"', {
@@ -203,6 +187,7 @@
       'variables': {
         'common_ldflags': [
           '-specs=nano.specs',
+          '-specs=nosys.specs',
           # TODO(340): Why does this not work???
           #'-T<(generated_path)/SW4STM32/configuration/STM32F746NGHx_FLASH.ld',
           # TODO(340): Why is this needed???
@@ -283,7 +268,7 @@
           ],
           'action': [
             '<(DEPTH)/tools/lk/flash-image.sh',
-            '--disco',
+            '--nucleo',
             '<(PRODUCT_DIR)/nucleo_dartino.bin',
           ],
         },

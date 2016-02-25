@@ -11,7 +11,7 @@
     '<(stm32_cube_f7_free_rtos_src)/',
     '<(stm32_cube_f7_free_rtos_src)/CMSIS_RTOS/',
     '<(stm32_cube_f7_free_rtos_src)/include/',
-    '<(stm32_cube_f7_free_rtos_src)/portable/GCC/ARM_CM7/',
+    '<(stm32_cube_f7_free_rtos_src)/portable/GCC/ARM_CM7/r0p1/',
   ],
   'sources': [
     '<(stm32_cube_f7_free_rtos_src)/croutine.c',
@@ -21,6 +21,6 @@
     '<(stm32_cube_f7_free_rtos_src)/tasks.c',
     '<(stm32_cube_f7_free_rtos_src)/timers.c',
     '<(stm32_cube_f7_free_rtos_src)/CMSIS_RTOS/cmsis_os.c',
-    '<(stm32_cube_f7_free_rtos_src)/portable/GCC/ARM_CM4F/port.c',
+    '<(stm32_cube_f7_free_rtos_src)/portable/GCC/ARM_CM7/r0p1/port.c',
   ],
 }

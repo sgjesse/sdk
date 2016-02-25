@@ -588,7 +588,6 @@
               '-L/GCC_XARM_EMBEDDED',
               '-static-libstdc++',
             ],
-
             'conditions': [
               ['OS=="mac"', {
                 'xcode_settings': {
@@ -598,6 +597,35 @@
                   # This removes the option -gdwarf-2'.
                   # TODO(sgjesse): Revisit debug symbol generation.
                   'GCC_GENERATE_DEBUGGING_SYMBOLS': 'NO',
+                  'OTHER_CFLAGS': [
+                    #'<@(common_cflags)',
+                    '-mthumb',
+                    '-Wall',
+                    '-fmessage-length=0',
+                    '-ffunction-sections',
+                    '-Og',
+                     #'<@(common_cflags_c)',
+                    '--std=gnu99',
+                  ],
+                  'OTHER_CPLUSPLUSFLAGS' : [
+                     #'<@(common_cflags)',
+                     '-mthumb',
+                     '-Wall',
+                     '-fmessage-length=0',
+                     '-ffunction-sections',
+                     '-Og',
+                     #'<@(common_cflags_cc)',
+                     '--std=gnu++11',
+                  ],
+                  'OTHER_LDFLAGS': [
+                    #'<@(common_cflags_ldflags)',
+                    '-mthumb',
+                    '-Wl,-Map=output.map',
+                    '-Wl,--gc-sections',
+                    # Fake define intercepted by cc_wrapper.py.
+                    '-L/GCC_XARM_EMBEDDED',
+                    '-static-libstdc++',
+                  ],
                 },
               }],
             ],
@@ -628,12 +656,28 @@
 
         'target_conditions': [
           ['_toolset=="target"', {
-            'cflags': [
-              '<@(common_cflags_ldflags)',
-            ],
-
-            'ldflags': [
-              '<@(common_cflags_ldflags)',
+            'conditions': [
+              ['OS=="mac"', {
+                'cflags': [
+                  '<@(common_cflags_ldflags)',
+                ],
+                'ldflags': [
+                  '<@(common_cflags_ldflags)',
+                ],
+              }],
+              ['OS=="mac"', {
+                'xcode_settings': {
+                  'OTHER_CFLAGS': [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                  'OTHER_CPLUSPLUSFLAGS' : [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                  'OTHER_LDFLAGS': [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                },
+              }],
             ],
           }],
         ],
@@ -652,12 +696,28 @@
 
         'target_conditions': [
           ['_toolset=="target"', {
-            'cflags': [
-              '<@(common_cflags_ldflags)',
-            ],
-
-            'ldflags': [
-              '<@(common_cflags_ldflags)',
+            'conditions': [
+              ['OS=="mac"', {
+                'cflags': [
+                  '<@(common_cflags_ldflags)',
+                ],
+                'ldflags': [
+                  '<@(common_cflags_ldflags)',
+                ],
+              }],
+              ['OS=="mac"', {
+                'xcode_settings': {
+                  'OTHER_CFLAGS': [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                  'OTHER_CPLUSPLUSFLAGS' : [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                  'OTHER_LDFLAGS': [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                },
+              }],
             ],
           }],
         ],
@@ -675,12 +735,28 @@
 
         'target_conditions': [
           ['_toolset=="target"', {
-            'cflags': [
-              '<@(common_cflags_ldflags)',
-            ],
-
-            'ldflags': [
-              '<@(common_cflags_ldflags)',
+            'conditions': [
+              ['OS=="mac"', {
+                'cflags': [
+                  '<@(common_cflags_ldflags)',
+                ],
+                'ldflags': [
+                  '<@(common_cflags_ldflags)',
+                ],
+              }],
+              ['OS=="mac"', {
+                'xcode_settings': {
+                  'OTHER_CFLAGS': [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                  'OTHER_CPLUSPLUSFLAGS' : [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                  'OTHER_LDFLAGS': [
+                    '<@(common_cflags_ldflags)',
+                  ],
+                },
+              }],
             ],
           }],
         ],

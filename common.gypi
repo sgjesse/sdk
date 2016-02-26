@@ -28,7 +28,7 @@
       '-Wno-invalid-offsetof',
     ],
 
-    'LK_PATH%': 'third_party/lk/lk-downstream',
+    'LK_PATH%': 'third_party/lk/lk-upstream',
 
     'LK_USE_DEPS_ARM_GCC%': '1',
 
@@ -448,7 +448,7 @@
               '<(DEPTH)/<(LK_PATH)/../../out',
               '<(DEPTH)/<(LK_PATH)/include/',
               '<(DEPTH)/<(LK_PATH)/arch/arm/include/',
-              '<(DEPTH)/<(LK_PATH)/lib/libm/include/',
+              '<(DEPTH)/<(LK_PATH)/external/lib/libm/include/',
               '<(DEPTH)/<(LK_PATH)/lib/minip/include/',
               '<(DEPTH)/<(LK_PATH)/arch/arm/arm/include',
               '<(DEPTH)/<(LK_PATH)/lib/heap/include/',

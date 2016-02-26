@@ -136,11 +136,11 @@ class Process : public ProcessList::Entry, public ProcessQueueList::Entry {
   void DebugInterrupt();
 
   // Debugging support.
-  void EnsureDebuggerAttached(Session* session);
+  void EnsureDebuggerAttached();
   int PrepareStepOver();
   int PrepareStepOut();
 
-  DebugInfo* debug_info() { return debug_info_; }
+  ProcessDebugInfo* debug_info() { return debug_info_; }
   bool is_debugging() const { return debug_info_ != NULL; }
 
   void TakeLookupCache();
@@ -156,7 +156,12 @@ class Process : public ProcessList::Entry, public ProcessQueueList::Entry {
   State state() const { return state_; }
 
   void RegisterFinalizer(HeapObject* object, WeakPointerCallback callback);
+  void RegisterExternalFinalizer(HeapObject* object,
+                                 ExternalWeakPointerCallback callback,
+                                 void* arg);
   void UnregisterFinalizer(HeapObject* object);
+  bool UnregisterExternalFinalizer(HeapObject* object,
+                                   ExternalWeakPointerCallback callback);
 
   static void FinalizeForeign(HeapObject* foreign, Heap* heap);
   static void FinalizeProcess(HeapObject* process, Heap* heap);
@@ -269,7 +274,7 @@ class Process : public ProcessList::Entry, public ProcessQueueList::Entry {
 
   int errno_cache_;
 
-  DebugInfo* debug_info_;
+  ProcessDebugInfo* debug_info_;
 
   List<List<uint8>> arguments_;
 

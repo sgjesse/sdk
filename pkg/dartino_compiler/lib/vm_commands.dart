@@ -27,11 +27,19 @@ abstract class VmCommand {
   factory VmCommand.fromBuffer(VmCommandCode code, Uint8List buffer) {
     switch (code) {
       case VmCommandCode.HandShakeResult:
-        bool success = CommandBuffer.readBoolFromBuffer(buffer, 0);
-        int versionLength = CommandBuffer.readInt32FromBuffer(buffer, 1);
-        String version =
-            CommandBuffer.readAsciiStringFromBuffer(buffer, 5, versionLength);
-        return new HandShakeResult(success, version);
+        int offset = 0;
+        bool success = CommandBuffer.readBoolFromBuffer(buffer, offset);
+        offset += 1;
+        int versionLength = CommandBuffer.readInt32FromBuffer(buffer, offset);
+        offset += 4;
+        String version = CommandBuffer.readAsciiStringFromBuffer(
+            buffer, offset, versionLength);
+        offset += versionLength;
+        int wordSize = CommandBuffer.readInt32FromBuffer(buffer, offset);
+        offset += 4;
+        int floatSize = CommandBuffer.readInt32FromBuffer(buffer, offset);
+        return new HandShakeResult(
+            success, version, wordSize, floatSize);
       case VmCommandCode.InstanceStructure:
         int classId = CommandBuffer.readInt64FromBuffer(buffer, 0);
         int fields = CommandBuffer.readInt32FromBuffer(buffer, 8);
@@ -75,9 +83,10 @@ abstract class VmCommand {
         return backtrace;
       case VmCommandCode.ProcessBreakpoint:
         int breakpointId = CommandBuffer.readInt32FromBuffer(buffer, 0);
-        int functionId = CommandBuffer.readInt64FromBuffer(buffer, 4);
-        int bytecodeIndex = CommandBuffer.readInt64FromBuffer(buffer, 12);
-        return new ProcessBreakpoint(breakpointId, functionId, bytecodeIndex);
+        int processId = CommandBuffer.readInt32FromBuffer(buffer, 4);
+        int functionId = CommandBuffer.readInt64FromBuffer(buffer, 8);
+        int bytecodeIndex = CommandBuffer.readInt64FromBuffer(buffer, 16);
+        return new ProcessBreakpoint(breakpointId, processId, functionId, bytecodeIndex);
       case VmCommandCode.ProcessDeleteBreakpoint:
         int id = CommandBuffer.readInt32FromBuffer(buffer, 0);
         return new ProcessDeleteBreakpoint(id);
@@ -183,14 +192,20 @@ class HandShake extends VmCommand {
   // Expects a HandShakeResult reply.
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class HandShakeResult extends VmCommand {
   final bool success;
   final String version;
+  final int wordSize;
+  final int floatSize;
 
-  const HandShakeResult(this.success, this.version)
+  const HandShakeResult(
+      this.success,
+      this.version,
+      this.wordSize,
+      this.floatSize)
       : super(VmCommandCode.HandShakeResult);
 
   void internalAddTo(
@@ -200,12 +215,17 @@ class HandShakeResult extends VmCommand {
         ..addUint8(success ? 1 : 0)
         ..addUint32(payload.length)
         ..addUint8List(payload)
+        ..addUint32(wordSize)
+        ..addUint32(floatSize)
         ..sendOn(sink, code);
   }
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$success, $version";
+  String valuesToString() {
+    return "success: $success, version: $version, wordsize: $wordSize, "
+        "floatSize: $floatSize";
+  }
 }
 
 class Dup extends VmCommand {
@@ -234,7 +254,7 @@ class PushNewOneByteString extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "'${new String.fromCharCodes(value)}'";
+  String valuesToString() => "value: '${new String.fromCharCodes(value)}'";
 }
 
 class PushNewTwoByteString extends VmCommand {
@@ -254,7 +274,7 @@ class PushNewTwoByteString extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "'${new String.fromCharCodes(value)}'";
+  String valuesToString() => "value: '${new String.fromCharCodes(value)}'";
 }
 
 class PushNewInstance extends VmCommand {
@@ -281,7 +301,7 @@ class PushNewClass extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$fields";
+  String valuesToString() => "fields: $fields";
 }
 
 class PushBuiltinClass extends VmCommand {
@@ -301,7 +321,7 @@ class PushBuiltinClass extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$name, $fields";
+  String valuesToString() => "name: $name, fields: $fields";
 }
 
 class PushConstantList extends VmCommand {
@@ -319,7 +339,7 @@ class PushConstantList extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$entries";
+  String valuesToString() => "entries: $entries";
 }
 
 class PushConstantByteList extends VmCommand {
@@ -337,7 +357,7 @@ class PushConstantByteList extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$entries";
+  String valuesToString() => "entries: $entries";
 }
 
 class PushConstantMap extends VmCommand {
@@ -355,7 +375,7 @@ class PushConstantMap extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$entries";
+  String valuesToString() => "entries: $entries";
 }
 
 class Generic extends VmCommand {
@@ -374,7 +394,7 @@ class Generic extends VmCommand {
   // We do not know who many commands to expect as a response.
   int get numberOfResponsesExpected => null;
 
-  String valuesToString() => "$payload";
+  String valuesToString() => "payload: $payload";
 
   String toString() => "Generic($code, ${valuesToString()})";
 }
@@ -394,7 +414,7 @@ class NewMap extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$map";
+  String valuesToString() => "mapId: $map";
 }
 
 class DeleteMap extends VmCommand {
@@ -412,7 +432,7 @@ class DeleteMap extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$map";
+  String valuesToString() => "mapId: $map";
 }
 
 abstract class MapAccess extends VmCommand {
@@ -429,6 +449,8 @@ abstract class MapAccess extends VmCommand {
         ..addUint64(index)
         ..sendOn(sink, code);
   }
+
+  String valuesToString() => "mapId: $map, index: $index";
 }
 
 class PopToMap extends MapAccess {
@@ -436,8 +458,6 @@ class PopToMap extends MapAccess {
       : super(map, index, VmCommandCode.PopToMap);
 
   int get numberOfResponsesExpected => 0;
-
-  String valuesToString() => "$map, $index";
 }
 
 class PushFromMap extends MapAccess {
@@ -445,8 +465,6 @@ class PushFromMap extends MapAccess {
       : super(map, index, VmCommandCode.PushFromMap);
 
   int get numberOfResponsesExpected => 0;
-
-  String valuesToString() => "$map, $index";
 }
 
 class RemoveFromMap extends MapAccess {
@@ -454,8 +472,6 @@ class RemoveFromMap extends MapAccess {
       : super(map, index, VmCommandCode.RemoveFromMap);
 
   int get numberOfResponsesExpected => 0;
-
-  String valuesToString() => "$map, $index";
 }
 
 class Drop extends VmCommand {
@@ -473,7 +489,7 @@ class Drop extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class PushNull extends VmCommand {
@@ -500,7 +516,7 @@ class PushBoolean extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => '$value';
+  String valuesToString() => 'value: $value';
 }
 
 class BytecodeSink implements Sink<List<int>> {
@@ -557,7 +573,8 @@ class PushNewFunction extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$arity, $literals, $bytecodes, $catchRanges";
+  String valuesToString() => "arity: $arity, literals: $literals, "
+      "bytecodes: $bytecodes, catchRanges: $catchRanges";
 }
 
 class PushNewInitializer extends VmCommand {
@@ -584,7 +601,7 @@ class ChangeStatics extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$count";
+  String valuesToString() => "count: $count";
 }
 
 class ChangeMethodLiteral extends VmCommand {
@@ -602,7 +619,7 @@ class ChangeMethodLiteral extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$index";
+  String valuesToString() => "index: $index";
 }
 
 class ChangeMethodTable extends VmCommand {
@@ -620,7 +637,7 @@ class ChangeMethodTable extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$count";
+  String valuesToString() => "count: $count";
 }
 
 class ChangeSuperClass extends VmCommand {
@@ -649,7 +666,7 @@ class ChangeSchemas extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => '$count, $delta';
+  String valuesToString() => 'count: $count, delta: $delta';
 }
 
 class PrepareForChanges extends VmCommand {
@@ -677,7 +694,7 @@ class CommitChanges extends VmCommand {
   /// Peer will respond with [CommitChangesResult].
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => '$count';
+  String valuesToString() => 'count: $count';
 }
 
 class CommitChangesResult extends VmCommand {
@@ -725,7 +742,7 @@ class MapLookup extends VmCommand {
   /// Peer will respond with [ObjectId].
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$mapId";
+  String valuesToString() => "mapId: $mapId";
 }
 
 class ObjectId extends VmCommand {
@@ -743,7 +760,7 @@ class ObjectId extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$id";
+  String valuesToString() => "id: $id";
 }
 
 class PushNewArray extends VmCommand {
@@ -761,7 +778,7 @@ class PushNewArray extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => '$length';
+  String valuesToString() => 'length: $length';
 }
 
 class PushNewInteger extends VmCommand {
@@ -779,7 +796,7 @@ class PushNewInteger extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class PushNewBigInteger extends VmCommand {
@@ -811,7 +828,9 @@ class PushNewBigInteger extends VmCommand {
   int get numberOfResponsesExpected => 0;
 
   String valuesToString() {
-    return "$negative, $parts, $classMap, $bigintClassId, $uint32DigitsClassId";
+    return "negative: $negative, parts: $parts, classMap: $classMap, "
+        "bigintClassId: $bigintClassId, "
+        "uint32DigitsClassId: $uint32DigitsClassId";
   }
 }
 
@@ -830,7 +849,7 @@ class PushNewDouble extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class ProcessSpawnForMain extends VmCommand {
@@ -853,7 +872,7 @@ class ProcessSpawnForMain extends VmCommand {
     buffer.sendOn(sink, code);
   }
 
-  String valuesToString() => "$arguments";
+  String valuesToString() => "arguments: $arguments";
 }
 
 class ProcessDebugInterrupt extends VmCommand {
@@ -894,7 +913,7 @@ class ProcessSetBreakpoint extends VmCommand {
   /// Peer will respond with [ProcessSetBreakpoint]
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class ProcessDeleteBreakpoint extends VmCommand {
@@ -913,7 +932,28 @@ class ProcessDeleteBreakpoint extends VmCommand {
   /// Peer will respond with [ProcessDeleteBreakpoint]
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$id";
+  String valuesToString() => "id: $id";
+}
+
+class ProcessDeleteOneShotBreakpoint extends VmCommand {
+  final int processId;
+  final int breakpointId;
+
+  const ProcessDeleteOneShotBreakpoint(this.processId, this.breakpointId)
+      : super(VmCommandCode.ProcessDeleteOneShotBreakpoint);
+
+  void internalAddTo(
+      Sink<List<int>> sink, CommandBuffer<VmCommandCode> buffer) {
+    buffer
+        ..addUint32(processId)
+        ..addUint32(breakpointId)
+        ..sendOn(sink, code);
+  }
+
+  /// Peer will respond with [ProcessDeleteBreakpoint]
+  int get numberOfResponsesExpected => 1;
+
+  String valuesToString() => "$processId, $breakpointId";
 }
 
 class ProcessBacktrace extends VmCommand {
@@ -934,14 +974,15 @@ class ProcessBacktrace extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$frames, $functionIds, $bytecodeIndices";
+  String valuesToString() => "frames: $frames, functionIds: $functionIds, "
+      "bytecodeIndices: $bytecodeIndices";
 }
 
 class ProcessBacktraceRequest extends VmCommand {
   final int processId;
 
-  // TODO(zerny): Make the process id non-optional and non-negative.
-  const ProcessBacktraceRequest([this.processId = -1])
+  // TODO(zerny): Make the process id non-negative.
+  const ProcessBacktraceRequest(this.processId)
       : super(VmCommandCode.ProcessBacktraceRequest);
 
   void internalAddTo(
@@ -953,7 +994,7 @@ class ProcessBacktraceRequest extends VmCommand {
   /// Peer will respond with [ProcessBacktrace]
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$processId";
+  String valuesToString() => "processId: $processId";
 }
 
 class ProcessFiberBacktraceRequest extends VmCommand {
@@ -972,7 +1013,7 @@ class ProcessFiberBacktraceRequest extends VmCommand {
   /// Peer will respond with [ProcessBacktrace]
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$fiber";
+  String valuesToString() => "fiber: $fiber";
 }
 
 class ProcessUncaughtExceptionRequest extends VmCommand {
@@ -990,11 +1031,12 @@ class ProcessUncaughtExceptionRequest extends VmCommand {
 
 class ProcessBreakpoint extends VmCommand {
   final int breakpointId;
+  final int processId;
   final int functionId;
   final int bytecodeIndex;
 
   const ProcessBreakpoint(
-      this.breakpointId, this.functionId, this.bytecodeIndex)
+      this.breakpointId, this.processId, this.functionId, this.bytecodeIndex)
       : super(VmCommandCode.ProcessBreakpoint);
 
   void internalAddTo(
@@ -1004,7 +1046,9 @@ class ProcessBreakpoint extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$breakpointId, $functionId, $bytecodeIndex";
+  String valuesToString() =>
+      "breakpoirntId: $breakpointId, processId: $processId, "
+      "functionId: $functionId, bytecodeIndex: $bytecodeIndex";
 }
 
 class ProcessLocal extends VmCommand {
@@ -1025,7 +1069,7 @@ class ProcessLocal extends VmCommand {
   /// Peer will respond with a [DartValue].
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$frame, $slot";
+  String valuesToString() => "frame: $frame, slot: $slot";
 }
 
 class ProcessLocalStructure extends VmCommand {
@@ -1049,7 +1093,7 @@ class ProcessLocalStructure extends VmCommand {
   /// The number of responses is not fixed.
   int get numberOfResponsesExpected => null;
 
-  String valuesToString() => "$frame, $slot";
+  String valuesToString() => "frame: $frame, slot: $slot";
 }
 
 class ProcessRestartFrame extends VmCommand {
@@ -1069,7 +1113,7 @@ class ProcessRestartFrame extends VmCommand {
   /// possible responses.
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$frame";
+  String valuesToString() => "frame: $frame";
 }
 
 class ProcessStep extends VmCommand {
@@ -1126,7 +1170,7 @@ class ProcessStepTo extends VmCommand {
   /// possible responses.
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "$functionId, $bcp";
+  String valuesToString() => "functionId: $functionId, bcp: $bcp";
 }
 
 class ProcessContinue extends VmCommand {
@@ -1176,7 +1220,7 @@ class ProcessNumberOfStacks extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class ProcessGetProcessIds extends VmCommand {
@@ -1197,7 +1241,7 @@ class ProcessGetProcessIdsResult extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$ids";
+  String valuesToString() => "ids: $ids";
 }
 
 class SessionEnd extends VmCommand {
@@ -1259,7 +1303,7 @@ class StdoutData extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class StderrData extends VmCommand {
@@ -1270,7 +1314,7 @@ class StderrData extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$value";
+  String valuesToString() => "value: $value";
 }
 
 class WriteSnapshot extends VmCommand {
@@ -1291,7 +1335,7 @@ class WriteSnapshot extends VmCommand {
   // Response is a [WriteSnapshotResult] message.
   int get numberOfResponsesExpected => 1;
 
-  String valuesToString() => "'$value'";
+  String valuesToString() => "value: '$value'";
 }
 
 // Contains two tables with information about function/class offsets in the
@@ -1332,7 +1376,8 @@ class WriteSnapshotResult extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$classOffsetTable, $functionOffsetTable";
+  String valuesToString() => "classOffsetTable: $classOffsetTable, "
+      "functionOffsetTable: $functionOffsetTable";
 }
 
 class InstanceStructure extends VmCommand {
@@ -1349,7 +1394,7 @@ class InstanceStructure extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$classId, $fields";
+  String valuesToString() => "classId: $classId, fields: $fields";
 }
 
 abstract class DartValue extends VmCommand {
@@ -1374,7 +1419,7 @@ class Instance extends DartValue {
   const Instance(this.classId)
       : super(VmCommandCode.Instance);
 
-  String valuesToString() => "$classId";
+  String valuesToString() => "classId: $classId";
 
   String dartToString() => "Instance of $classId";
 }
@@ -1385,7 +1430,7 @@ class ClassValue extends DartValue {
   const ClassValue(this.classId)
       : super(VmCommandCode.Class);
 
-  String valuesToString() => "$classId";
+  String valuesToString() => "classId: $classId";
 
   String dartToString() => "Class with id $classId";
 }
@@ -1452,7 +1497,7 @@ class ConnectionError extends VmCommand {
 
   int get numberOfResponsesExpected => 0;
 
-  String valuesToString() => "$error, $trace";
+  String valuesToString() => "error: $error, trace: $trace";
 }
 
 // Any change in [VmCommandCode] must also be done in [Opcode] in
@@ -1481,6 +1526,7 @@ enum VmCommandCode {
   ProcessRun,
   ProcessSetBreakpoint,
   ProcessDeleteBreakpoint,
+  ProcessDeleteOneShotBreakpoint,
   ProcessStep,
   ProcessStepOver,
   ProcessStepOut,

@@ -41,6 +41,9 @@ import 'src/shared_command_infrastructure.dart' show
 import 'src/hub/session_manager.dart' show
     SessionState;
 
+import 'package:dartino_compiler/program_info.dart' show
+    Configuration;
+
 part 'vm_command_reader.dart';
 part 'input_handler.dart';
 
@@ -219,6 +222,8 @@ class Session extends DartinoVmSession {
   bool running = false;
   bool terminated = false;
 
+  Configuration configuration;
+
   Session(Socket dartinoVmSocket,
           this.compiler,
           Sink<List<int>> stdoutSink,
@@ -336,6 +341,7 @@ class Session extends DartinoVmSession {
 
       case VmCommandCode.ProcessBreakpoint:
         ProcessBreakpoint command = response;
+        debugState.currentProcess = command.processId;
         var function = dartinoSystem.lookupFunctionById(command.functionId);
         debugState.topFrame = new BackTraceFrame(
             function, command.bytecodeIndex, compiler, debugState);
@@ -367,7 +373,7 @@ class Session extends DartinoVmSession {
         new ProcessSetBreakpoint(bytecodeIndex),
     ]);
     int breakpointId = response.value;
-    var breakpoint = new Breakpoint(name, bytecodeIndex, breakpointId);
+    var breakpoint = new Breakpoint(function, bytecodeIndex, breakpointId);
     debugState.breakpoints[breakpointId] = breakpoint;
     return breakpoint;
   }
@@ -423,17 +429,19 @@ class Session extends DartinoVmSession {
     return setFileBreakpointFromPosition('$file:$line:$column', file, position);
   }
 
-  Future doDeleteBreakpoint(int id) async {
-    ProcessDeleteBreakpoint response =
-        await runCommand(new ProcessDeleteBreakpoint(id));
-    assert(response.id == id);
+  Future doDeleteOneShotBreakpoint(int processId, int breakpointId) async {
+    ProcessDeleteBreakpoint response = await runCommand(
+        new ProcessDeleteOneShotBreakpoint(processId, breakpointId));
+    assert(response.id == breakpointId);
   }
 
   Future<Breakpoint> deleteBreakpoint(int id) async {
     if (!debugState.breakpoints.containsKey(id)) {
       return null;
     }
-    await doDeleteBreakpoint(id);
+    ProcessDeleteBreakpoint response =
+        await runCommand(new ProcessDeleteBreakpoint(id));
+    assert(response.id == id);
     return debugState.breakpoints.remove(id);
   }
 
@@ -501,6 +509,7 @@ class Session extends DartinoVmSession {
     // we skip internal frame and stop at the next visible frame.
     SourceLocation return_location = trace.visibleFrame(1).sourceLocation();
     VmCommand response;
+    int processId = debugState.currentProcess;
     do {
       await sendCommand(const ProcessStepOut());
       ProcessSetBreakpoint setBreakpoint = await readNextCommand();
@@ -513,7 +522,7 @@ class Session extends DartinoVmSession {
           response is ProcessBreakpoint &&
           response.breakpointId == setBreakpoint.value;
       if (!success) {
-        await doDeleteBreakpoint(setBreakpoint.value);
+        await doDeleteOneShotBreakpoint(processId, setBreakpoint.value);
         return response;
       }
     } while (!debugState.topFrame.isVisible);
@@ -538,6 +547,7 @@ class Session extends DartinoVmSession {
 
   Future<VmCommand> stepOverBytecode() async {
     assert(running);
+    int processId = debugState.currentProcess;
     await sendCommand(const ProcessStepOver());
     ProcessSetBreakpoint setBreakpoint = await readNextCommand();
     VmCommand response = await handleProcessStop(await readNextCommand());
@@ -546,7 +556,7 @@ class Session extends DartinoVmSession {
         response.breakpointId == setBreakpoint.value;
     if (!success && !terminated && setBreakpoint.value != -1) {
       // Delete the initial one-time breakpoint as it wasn't hit.
-      await doDeleteBreakpoint(setBreakpoint.value);
+      await doDeleteOneShotBreakpoint(processId, setBreakpoint.value);
     }
     return response;
   }
@@ -583,7 +593,7 @@ class Session extends DartinoVmSession {
                          debugState));
     }
     return stackTrace;
- }
+  }
 
   Future<RemoteObject> uncaughtException() async {
     assert(loaded);
@@ -607,7 +617,8 @@ class Session extends DartinoVmSession {
     assert(loaded);
     if (debugState.currentBackTrace == null) {
       ProcessBacktrace backtraceResponse =
-          await runCommand(const ProcessBacktraceRequest());
+          await runCommand(
+              new ProcessBacktraceRequest(debugState.currentProcess));
       debugState.currentBackTrace =
           stackTraceFromBacktraceResponse(backtraceResponse);
     }
